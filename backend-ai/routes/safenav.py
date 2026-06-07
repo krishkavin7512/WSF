@@ -88,8 +88,8 @@ def find_safest_route(start_lat, start_lng, end_lat, end_lng, dynamic_zones):
         response = requests.get(url, params=params)
         data = response.json()
         
-        if "routes" not in data:
-            return {"error": "No routes found", "raw": data}
+        if "routes" not in data or not data["routes"]:
+            return {"status": "error", "message": "No routes found from Mapbox", "raw": data}
             
         scored_routes = []
         

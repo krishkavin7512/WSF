@@ -7,11 +7,12 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
-    volumes:
-      - ./assets:/app/assets
+    # Values come from a gitignored .env in this directory (or the host shell).
+    # main.py requires SUPABASE_SERVICE_ROLE_KEY; safenav.py requires MAPBOX_ACCESS_TOKEN.
     environment:
       - SUPABASE_URL=http://host.docker.internal:54321
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-your-anon-key-here}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - MAPBOX_ACCESS_TOKEN=${MAPBOX_ACCESS_TOKEN}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
