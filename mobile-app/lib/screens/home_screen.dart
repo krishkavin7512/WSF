@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:convert';
+import 'package:flutter/material.dart';
 // 1. HIDE 'Size' from Mapbox to avoid conflict with Flutter's Size
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
 import 'package:permission_handler/permission_handler.dart';
@@ -307,7 +308,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ? Colors.amber.withOpacity(0.8).value
             : Colors.red.withOpacity(0.8).value;
 
-        final boundary = zone['boundary'];
+        final rawBoundary = zone['boundary'];
+        final boundary = rawBoundary is String
+            ? jsonDecode(rawBoundary) as Map<String, dynamic>
+            : rawBoundary as Map<String, dynamic>;
 
         if (boundary['type'] == 'Polygon') {
           List<dynamic> ringData = boundary['coordinates'][0];

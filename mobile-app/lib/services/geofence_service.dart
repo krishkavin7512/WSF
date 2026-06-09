@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
@@ -49,8 +50,13 @@ class GeofenceService {
     
     int index = 0;
     for (var zone in activeZones) {
-       if (zone['boundary'] != null && zone['boundary']['type'] == 'Polygon') {
-          List<dynamic> ringData = zone['boundary']['coordinates'][0];
+       if (zone['boundary'] != null) {
+          final rawB = zone['boundary'];
+          final Map<String, dynamic> bMap = rawB is String
+              ? jsonDecode(rawB) as Map<String, dynamic>
+              : rawB as Map<String, dynamic>;
+          if (bMap['type'] != 'Polygon') continue;
+          List<dynamic> ringData = bMap['coordinates'][0];
           
           // flutter_background_geolocation expects vertices as [lat, lng]
           List<List<double>> vertices = ringData.map<List<double>>((pt) {
@@ -68,6 +74,7 @@ class GeofenceService {
           ));
        }
     }
+
     
     if (bgGeofences.isNotEmpty) {
       await bg.BackgroundGeolocation.addGeofences(bgGeofences);
@@ -117,7 +124,9 @@ class GeofenceService {
 
     // Always upsert to live_locations so dashboard beacon stays current
     final userId = _supabase.auth.currentUser?.id;
+    print('[GeoFence] _onLocation fired. userId=$userId lat=$userLat lng=$userLng');
     if (userId != null) {
+      print('[GeoFence] Attempting live_locations upsert for user: $userId');
       _supabase.from('live_locations').upsert({
         'user_id': userId,
         'latitude': userLat,
@@ -127,9 +136,13 @@ class GeofenceService {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
         'source_type': 'online',
         'mesh_hop_count': 0,
-      }, onConflict: 'user_id').then((_) {}).catchError((e) {
-        print('Failed to update live_locations: $e');
+      }, onConflict: 'user_id').then((result) {
+        print('[GeoFence] live_locations upsert success: $result');
+      }).catchError((e) {
+        print('[GeoFence] live_locations upsert FAILED: $e');
       });
+    } else {
+      print('[GeoFence] Skipping upsert — user not authenticated');
     }
 
     // Trip-specific writes and drift detection

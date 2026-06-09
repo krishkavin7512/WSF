@@ -10,12 +10,17 @@ class ApiService {
   final String _baseUrl = dotenv.env['BACKEND_API_BASE_URL']?.isNotEmpty == true
       ? dotenv.env['BACKEND_API_BASE_URL']!
       : 'http://10.0.2.2:8000';
-  final _supabase = Supabase.instance.client;
-
+  ApiService() { print('Backend URL: $_baseUrl'); }
   Future<List<dynamic>> getDangerZones({int? simulatedHour}) async {
     try {
-      final response = await _supabase.rpc('get_active_zones');
-      return response as List<dynamic>;
+      final hour = simulatedHour ?? DateTime.now().hour;
+      final url = Uri.parse('$_baseUrl/zones?simulated_hour=$hour');
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['zones'] as List<dynamic>? ?? [];
+      }
+      return [];
     } catch (e) {
       print('❌ Zone Fetch Error: $e');
       return [];
