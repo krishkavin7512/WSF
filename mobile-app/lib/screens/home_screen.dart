@@ -90,7 +90,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   // ✅ NEW: Zone Logic Variables
   List<dynamic> _activeZones = [];
-  List<Map<String, dynamic>> _safeHavens = []; // Stores current zones for calculation
+  List<Map<String, dynamic>> _safeHavens = [];
+
+  // Heatmap
+  bool _showHeatmap = false;
+  List<Map<String, dynamic>> _heatmapZones = [];
+  PolygonAnnotationManager? _heatmapManager; // Stores current zones for calculation
   String _safetyStatusTitle = "SENTRA ACTIVE";
   String _safetyStatusSubtitle = "You are in a Safe Zone";
   Color _safetyPanelBg = SentraDesign.uberBlack;
@@ -291,6 +296,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
     mapboxMap.annotations.createPointAnnotationManager().then((manager) {
       _pointManager = manager;
+    });
+    mapboxMap.annotations.createPolygonAnnotationManager().then((manager) {
+      _heatmapManager = manager;
+      final hour = DateTime.now().hour;
+      if (hour >= 20 || hour < 7) {
+        setState(() => _showHeatmap = true);
+        _loadHeatmap();
+      }
     });
   }
 
@@ -836,6 +849,72 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _fetchAndDrawRoute(lat, lng, isPreview: true);
   }
 
+  // --- HEATMAP ---
+
+  Future<void> _loadHeatmap() async {
+    String city = 'hyderabad';
+    if (_startLat >= 12.8 && _startLat <= 13.3 &&
+        _startLng >= 80.0 && _startLng <= 80.4) {
+      city = 'chennai';
+    }
+    final zones = await _apiService.getHeatmapZones(
+      city: city,
+      hour: DateTime.now().hour,
+    );
+    setState(() => _heatmapZones = zones);
+    await _renderHeatmap();
+  }
+
+  Future<void> _renderHeatmap() async {
+    if (_heatmapManager == null) return;
+    await _heatmapManager!.deleteAll();
+    final List<PolygonAnnotationOptions> options = [];
+    for (final zone in _heatmapZones) {
+      final double lat = (zone['latitude'] as num).toDouble();
+      final double lng = (zone['longitude'] as num).toDouble();
+      final double radiusM = (zone['radius_m'] as num).toDouble();
+      final String level = zone['risk_level'] as String? ?? 'medium';
+      final int fillColor = level == 'high'
+          ? Colors.red.withValues(alpha: 0.25).toARGB32()
+          : Colors.orange.withValues(alpha: 0.20).toARGB32();
+      final int strokeColor = level == 'high'
+          ? Colors.red.withValues(alpha: 0.55).toARGB32()
+          : Colors.orange.withValues(alpha: 0.50).toARGB32();
+      final ring = _generateCirclePolygon(lat, lng, radiusM);
+      options.add(PolygonAnnotationOptions(
+        geometry: Polygon(coordinates: [ring]),
+        fillColor: fillColor,
+        fillOutlineColor: strokeColor,
+      ));
+    }
+    if (options.isNotEmpty) {
+      await _heatmapManager!.createMulti(options);
+    }
+  }
+
+  Future<void> _clearHeatmap() async {
+    await _heatmapManager?.deleteAll();
+    setState(() => _heatmapZones = []);
+  }
+
+  List<Position> _generateCirclePolygon(
+      double lat, double lng, double radiusM,
+      {int points = 32}) {
+    const double earthRadius = 6371000.0;
+    final List<Position> coords = [];
+    for (int i = 0; i <= points; i++) {
+      final double angle = (i / points) * 2 * pi;
+      final double dLat =
+          (radiusM / earthRadius) * (180 / pi) * sin(angle);
+      final double dLng = (radiusM / earthRadius) *
+          (180 / pi) *
+          cos(angle) /
+          cos(lat * pi / 180);
+      coords.add(Position(lng + dLng, lat + dLat));
+    }
+    return coords;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -865,6 +944,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
             _buildAnimatedSearchPanel(),
             if (_isPendingRoute) _buildDestinationPreviewCard(),
+            Positioned(
+              top: 120,
+              right: 12,
+              child: SafeArea(
+                child: FloatingActionButton.small(
+                  heroTag: 'heatmap_toggle',
+                  backgroundColor:
+                      _showHeatmap ? Colors.red.shade700 : Colors.grey.shade800,
+                  onPressed: () {
+                    setState(() => _showHeatmap = !_showHeatmap);
+                    if (_showHeatmap) {
+                      _loadHeatmap();
+                    } else {
+                      _clearHeatmap();
+                    }
+                  },
+                  child: const Icon(
+                    Icons.layers,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1315,9 +1418,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           children: [
             Container(
               width: double.infinity,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: SentraDesign.uberBlack,
-                borderRadius: const BorderRadius.only(
+                borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(24),
                   topRight: Radius.circular(24),
                 ),
@@ -1747,7 +1850,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                   )
                 else
-                  ..._safeHavens.map((h) => _buildSafePlaceTile(h)).toList(),
+                  ..._safeHavens.map((h) => _buildSafePlaceTile(h)),
                 const SizedBox(height: 20),
               ],
             ),

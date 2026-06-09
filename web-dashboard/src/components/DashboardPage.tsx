@@ -23,7 +23,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import MapView from "./MapView";
+import MapView, { HeatmapZone } from "./MapView";
 import { ZoneManagement } from "./ZoneManagement";
 import { AnalyticsView } from "./AnalyticsView";
 import { IncidentsView } from "./IncidentsView";
@@ -203,6 +203,21 @@ export const DashboardPage: React.FC = () => {
       });
   }, [displayLocations, supabase]);
 
+  // Heatmap
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [heatmapZones, setHeatmapZones] = useState<HeatmapZone[]>([]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase
+      .from('heatmap_zones')
+      .select('*')
+      .then(({ data, error }) => {
+        if (error) console.error('heatmap fetch error:', error.message);
+        setHeatmapZones((data as HeatmapZone[]) ?? []);
+      });
+  }, [supabase]);
+
   return (
     <div className="flex h-screen w-full bg-[#09090b] text-zinc-100 font-sans overflow-hidden dark">
 
@@ -263,6 +278,15 @@ export const DashboardPage: React.FC = () => {
             </div>
             <DayNightToggle mode={timeMode} onModeChange={setTimeMode} />
             <div className="h-4 w-[1px] bg-white/10" />
+            <button
+              onClick={() => setShowHeatmap(h => !h)}
+              title="Toggle Heatmap"
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${showHeatmap ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-white/5 text-zinc-400 border border-white/10 hover:border-white/20'}`}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              Heatmap
+            </button>
+            <div className="h-4 w-[1px] bg-white/10" />
             <ThemeToggle />
             <div className="h-4 w-[1px] bg-white/10" />
             <UserProfile />
@@ -285,6 +309,8 @@ export const DashboardPage: React.FC = () => {
                 mapStyle="mapbox://styles/mapbox/dark-v11"
                 showPatrolRoutes={false}
                 flyToLocation={flyToLocation}
+                showHeatmap={showHeatmap}
+                heatmapZones={heatmapZones}
               />
             </>
           )}

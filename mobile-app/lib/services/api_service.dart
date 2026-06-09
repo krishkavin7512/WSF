@@ -27,6 +27,31 @@ class ApiService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getHeatmapZones({
+    String? city,
+    int? hour,
+  }) async {
+    try {
+      String url = '$_baseUrl/heatmap';
+      final params = <String, String>{};
+      if (city != null) params['city'] = city;
+      if (hour != null) params['hour'] = hour.toString();
+      if (params.isNotEmpty) {
+        final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
+        url += '?$query';
+      }
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return List<Map<String, dynamic>>.from(data['zones'] as List);
+      }
+      return [];
+    } catch (e) {
+      print('Heatmap fetch error: $e');
+      return [];
+    }
+  }
+
   Future<Map<String, dynamic>?> getSafeRoute(
       double startLat, double startLng, double endLat, double endLng) async {
     final url = Uri.parse('$_baseUrl/get-safe-route');
