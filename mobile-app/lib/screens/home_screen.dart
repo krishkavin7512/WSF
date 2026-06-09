@@ -1,5 +1,8 @@
 ﻿import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 // 1. HIDE 'Size' from Mapbox to avoid conflict with Flutter's Size
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
 import 'package:permission_handler/permission_handler.dart';
@@ -86,7 +89,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isImmediateSosDispatching = false;
 
   // ✅ NEW: Zone Logic Variables
-  List<dynamic> _activeZones = []; // Stores current zones for calculation
+  List<dynamic> _activeZones = [];
+  List<Map<String, dynamic>> _safeHavens = []; // Stores current zones for calculation
   String _safetyStatusTitle = "SENTRA ACTIVE";
   String _safetyStatusSubtitle = "You are in a Safe Zone";
   Color _safetyPanelBg = SentraDesign.uberBlack;
@@ -109,6 +113,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    if (_activeTripId != null) {
+      Supabase.instance.client
+          .from('trips')
+          .update({
+            'status': 'completed',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', _activeTripId!)
+          .catchError((_) {});
+    }
     _startController.dispose();
     _destinationController.dispose();
     _startFocus.dispose();
@@ -233,6 +247,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     };
 
     await geofenceService.initialize();
+    _loadSafeHavens();
   }
 
   _onMapCreated(MapboxMap mapboxMap) {
@@ -741,6 +756,86 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  Future<void> _loadSafeHavens() async {
+    final token = dotenv.env['MAPBOX_ACCESS_TOKEN'] ?? '';
+    if (token.isEmpty) return;
+
+    const categories = ['police', 'hospital', 'pharmacy', 'fire_station'];
+    final List<Map<String, dynamic>> results = [];
+
+    for (final category in categories) {
+      try {
+        final url = Uri.parse(
+          'https://api.mapbox.com/search/searchbox/v1/category/$category'
+          '?access_token=$token'
+          '&proximity=$_startLng,$_startLat'
+          '&limit=2'
+          '&language=en',
+        );
+        final response = await http.get(url);
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final features = data['features'] as List? ?? [];
+          for (final f in features) {
+            final coords = f['geometry']['coordinates'] as List;
+            final props = f['properties'] as Map<String, dynamic>;
+            final dist = _calculateDistance(
+              _startLat, _startLng,
+              coords[1].toDouble(), coords[0].toDouble(),
+            );
+            results.add({
+              'name': props['name'] ?? category,
+              'category': category,
+              'distance': dist,
+              'lat': coords[1].toDouble(),
+              'lng': coords[0].toDouble(),
+              'address': props['full_address'] ?? props['place_formatted'] ?? '',
+            });
+          }
+        }
+      } catch (e) {
+        print('[SafeHavens] Failed to fetch $category: $e');
+      }
+    }
+
+    results.sort((a, b) =>
+        (a['distance'] as double).compareTo(b['distance'] as double));
+
+    if (mounted) {
+      setState(() {
+        _safeHavens = results.take(4).toList();
+      });
+    }
+  }
+
+  double _calculateDistance(
+      double lat1, double lng1, double lat2, double lng2) {
+    const R = 6371.0;
+    final dLat = (lat2 - lat1) * pi / 180;
+    final dLng = (lng2 - lng1) * pi / 180;
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * pi / 180) *
+            cos(lat2 * pi / 180) *
+            sin(dLng / 2) *
+            sin(dLng / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return R * c;
+  }
+
+  void _selectDestinationFromSafeHaven(
+      double lat, double lng, String name) {
+    _pointManager?.deleteAll();
+    _polylineManager?.deleteAll();
+    setState(() {
+      _destLat = lat;
+      _destLng = lng;
+      _destinationController.text = name;
+      _isPendingRoute = true;
+      _pendingDestName = name;
+    });
+    _fetchAndDrawRoute(lat, lng, isPreview: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -954,7 +1049,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     onChanged: (val) => _onSearchChanged(val, false),
                     autofocus: true,
                     cursorColor: const Color(0xFF00BCD4),
-                    style: GoogleFonts.inter(color: Colors.white, fontSize: 15),
+                    style: GoogleFonts.inter(color: Colors.white, fontSize: 15).copyWith(overflow: TextOverflow.ellipsis),
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: fieldBg,
@@ -1099,7 +1194,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 Expanded(
                   child: Text(
                     _pendingDestName,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
                       color: Colors.white,
@@ -1145,7 +1240,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: SizedBox(
                     height: 40,
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
+                        print('=== START JOURNEY TAPPED ===');
+                        final supabase = Supabase.instance.client;
+                        print('User ID: ${supabase.auth.currentUser?.id}');
+                        print('Start: $_startLat, $_startLng');
+                        print('Dest: $_destLat, $_destLng');
+                        print('Active trip before insert: $_activeTripId');
                         if (_pendingRouteData != null) {
                           // Route already drawn in preview — just activate it
                           setState(() {
@@ -1158,6 +1259,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           // Fallback: fetch fresh if preview route wasn't cached
                           setState(() => _isPendingRoute = false);
                           _fetchAndDrawRoute(_destLat!, _destLng!);
+                        }
+                        if (supabase.auth.currentUser != null) {
+                          try {
+                            print('Attempting trips insert...');
+                            final tripResponse = await supabase
+                                .from('trips')
+                                .insert({
+                                  'user_id': supabase.auth.currentUser!.id,
+                                  'status': 'active',
+                                  'start_location': 'SRID=4326;POINT($_startLng $_startLat)',
+                                  'destination': 'SRID=4326;POINT($_destLng $_destLat)',
+                                  'started_at': DateTime.now().toIso8601String(),
+                                })
+                                .select('id')
+                                .single();
+                            print('Trip insert success: $tripResponse');
+                            final String tripId = tripResponse['id'] as String;
+                            setState(() { _activeTripId = tripId; });
+                            print('Trip created: $tripId');
+                            GeofenceService().startTripTracker(tripId, _currentRouteGeometry);
+                          } catch (e) {
+                            print('Trip insert FAILED: $e');
+                            print('Trip insert error type: ${e.runtimeType}');
+                          }
+                        } else {
+                          print('Trip insert skipped — user not authenticated');
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -1309,7 +1436,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 children: [
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
+                        if (_activeTripId != null) {
+                          await Supabase.instance.client
+                              .from('trips')
+                              .update({
+                                'status': 'completed',
+                                'updated_at': DateTime.now().toIso8601String(),
+                              })
+                              .eq('id', _activeTripId!);
+                          setState(() { _activeTripId = null; });
+                        }
+                        GeofenceService().stopTripTracker();
                         setState(() {
                           _isRouteActive = false;
                           _isTracking = false;
@@ -1317,7 +1455,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           _destinationController.clear();
                           _polylineManager?.deleteAll();
                           _pointManager?.deleteAll();
-                          GeofenceService().stopTripTracker();
                         });
                       },
                       style: ElevatedButton.styleFrom(
@@ -1350,63 +1487,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             _polylineManager?.deleteAll();
                             _pointManager?.deleteAll();
                           });
-                          GeofenceService().stopTripTracker();
                           if (_activeTripId != null) {
+                            print('Trip ended: $_activeTripId');
                             await Supabase.instance.client
                                 .from('trips')
-                                .update({'status': 'completed'}).eq(
-                                    'id', _activeTripId as String);
-                            _activeTripId = null;
+                                .update({
+                                  'status': 'completed',
+                                  'updated_at': DateTime.now().toIso8601String(),
+                                })
+                                .eq('id', _activeTripId!);
+                            setState(() { _activeTripId = null; });
                           }
+                          GeofenceService().stopTripTracker();
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                   content: Text("Arrived. Trip Ended.")));
                         } else {
-                          // Start Trip
-                          ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text(
-                                      "Generating Secure Escort Trip...")));
-                          try {
-                            if (Supabase.instance.client.auth.currentUser ==
-                                null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        "Please sign in to start a trip.")),
-                              );
-                              return;
-                            }
-                            final expectedArrival = DateTime.now()
-                                .add(Duration(minutes: _durationMin.toInt()))
-                                .toIso8601String();
-                            final response = await Supabase.instance.client
-                                .from('trips')
-                                .insert({
-                                  'user_id': Supabase
-                                      .instance.client.auth.currentUser!.id,
-                                  'status': 'active',
-                                  'start_location':
-                                      'SRID=4326;POINT($_startLng $_startLat)',
-                                  'destination':
-                                      'SRID=4326;POINT($_destLng $_destLat)',
-                                  'expected_arrival': expectedArrival,
-                                })
-                                .select('id')
-                                .single();
-
-                            _activeTripId = response['id'];
-                            setState(() {
-                              _isTracking = true;
-                            });
+                          // Start Trip — trip row already created by Start Journey
+                          setState(() { _isTracking = true; });
+                          if (_activeTripId != null) {
                             GeofenceService().startTripTracker(
                                 _activeTripId!, _currentRouteGeometry);
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                 content: Text(
                                     "Tracking Active! Trip ID: ${_activeTripId!.substring(0, 8)}")));
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text("Failed to start trip: $e")));
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Generating Secure Escort Trip...")));
                           }
                         }
                       },
@@ -1628,9 +1735,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(height: 15),
-                _buildSafePlaceTile("Katpadi Station", "0.5 km • Open 24x7"),
-                _buildSafePlaceTile(
-                    "SRM Main Gate", "1.2 km • Security Present"),
+                if (_safeHavens.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      "Loading nearby safe places...",
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  )
+                else
+                  ..._safeHavens.map((h) => _buildSafePlaceTile(h)).toList(),
                 const SizedBox(height: 20),
               ],
             ),
@@ -1810,50 +1927,83 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSafePlaceTile(String title, String subtitle) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: SentraDesign.cardShadow,
+  Widget _buildSafePlaceTile(Map<String, dynamic> haven) {
+    final String title = haven['name'] as String;
+    final double dist = haven['distance'] as double;
+    final String address = (haven['address'] as String?) ?? '';
+    final String category = (haven['category'] as String?) ?? '';
+
+    IconData icon;
+    switch (category) {
+      case 'police':
+        icon = Icons.local_police;
+        break;
+      case 'hospital':
+        icon = Icons.local_hospital;
+        break;
+      case 'pharmacy':
+        icon = Icons.local_pharmacy;
+        break;
+      case 'fire_station':
+        icon = Icons.fire_truck;
+        break;
+      default:
+        icon = Icons.store_rounded;
+    }
+
+    return GestureDetector(
+      onTap: () => _selectDestinationFromSafeHaven(
+        haven['lat'] as double,
+        haven['lng'] as double,
+        title,
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: SentraDesign.chipGray,
-              borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: SentraDesign.cardShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: SentraDesign.chipGray,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: SentraDesign.uberBlack, size: 22),
             ),
-            child: const Icon(Icons.store_rounded,
-                color: SentraDesign.uberBlack, size: 22),
-          ),
-          const SizedBox(width: 15),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${dist.toStringAsFixed(1)} km'
+                    '${address.isNotEmpty ? ' • $address' : ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          const Icon(Icons.directions_outlined, color: Colors.grey, size: 20),
-        ],
+            ),
+            const Icon(Icons.directions_outlined, color: Colors.grey, size: 20),
+          ],
+        ),
       ),
     );
   }

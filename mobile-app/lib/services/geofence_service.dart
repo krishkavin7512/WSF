@@ -151,10 +151,7 @@ class GeofenceService {
     if (userId != null) {
       _supabase.from('trip_pings').insert({
         'trip_id': _activeTripId,
-        'user_id': userId,
-        'latitude': userLat,
-        'longitude': userLng,
-        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'current_location': 'SRID=4326;POINT($userLng $userLat)',
       }).then((_) {}).catchError((e) {
         print('Failed to send trip ping: $e');
       });

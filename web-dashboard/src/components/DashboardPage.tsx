@@ -33,7 +33,7 @@ import { PatrolView } from "./PatrolView";
 import { Incident, LiveLocation } from "../types";
 import { useZones } from "../hooks/useZones";
 import { useRealtimeLocations } from "../hooks/useRealtimeLocations";
-import { REAL_INCIDENTS, REAL_USER_LOCATIONS } from "../data/velloreRealData";
+import { useRealtimeIncidents } from "../hooks/useRealtimeIncidents";
 import { TimeMode } from "../data/crimeZones";
 import { getSupabaseClient } from "../lib/supabaseClient";
 
@@ -155,22 +155,6 @@ const NAV_ITEMS = [
 
 // --- MAIN PAGE LAYOUT ---
 
-const mockIncidents: Incident[] = [
-  {
-    id: "alert-1",
-    user_id: "u1",
-    status: "open",
-    severity: "high",
-    latitude: 12.9724,
-    longitude: 79.1551,
-    created_at: new Date().toISOString(),
-    display_name: "Katpadi Station",
-    notes: "Scream Detected",
-    source: "audio"
-  }
-];
-
-
 export const DashboardPage: React.FC = () => {
   // Time mode state for day/night zone filtering
   const [timeMode, setTimeMode] = useState<TimeMode>('all');
@@ -178,9 +162,10 @@ export const DashboardPage: React.FC = () => {
   // Real-time data hooks
   const { zones, addZone, deleteZone } = useZones(timeMode);
 
-  // Connect to Supabase for real-time locations
+  // Connect to Supabase for real-time locations and incidents
   const supabase = getSupabaseClient();
   const { locations } = useRealtimeLocations(supabase);
+  const { incidents, openIncidents, loading: incidentsLoading, acknowledgeIncident, resolveIncident } = useRealtimeIncidents(supabase);
 
   // Fallback to empty array if no data, or keep empty to wait for stream
   const displayLocations = locations;
@@ -290,7 +275,7 @@ export const DashboardPage: React.FC = () => {
             <>
               <SystemBanner />
               <MapView
-                incidents={REAL_INCIDENTS}
+                incidents={incidents}
                 locations={displayLocations}
                 zones={zones}
                 selectedIncidentId={null}
@@ -415,11 +400,26 @@ export const DashboardPage: React.FC = () => {
               </div>
 
               <div className="mb-6">
-                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-3 tracking-widest px-1">Critical Alerts</div>
-                <DangerAlert
-                  title="Scream Detected"
-                  location="Katpadi Station • Zone 4"
-                />
+                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-3 tracking-widest px-1 flex items-center justify-between">
+                  <span>Critical Alerts</span>
+                  <span className="text-red-400 font-mono">{incidents.filter(i => i.severity === 'high' && i.status === 'open').length}</span>
+                </div>
+                {incidentsLoading ? (
+                  <div className="text-xs text-zinc-600 px-1 py-2 animate-pulse">Loading alerts...</div>
+                ) : incidents.filter(i => i.severity === 'high' && i.status === 'open').length === 0 ? (
+                  <div className="text-xs text-zinc-600 px-1 py-2">No critical alerts</div>
+                ) : (
+                  incidents
+                    .filter(i => i.severity === 'high' && i.status === 'open')
+                    .slice(0, 3)
+                    .map(incident => (
+                      <DangerAlert
+                        key={incident.id}
+                        title={incident.notes ?? incident.source ?? 'Alert'}
+                        location={incident.display_name ?? `${incident.latitude.toFixed(4)}, ${incident.longitude.toFixed(4)}`}
+                      />
+                    ))
+                )}
               </div>
 
               <div className="mb-6">
@@ -430,19 +430,19 @@ export const DashboardPage: React.FC = () => {
               <div>
                 <div className="text-[10px] uppercase font-bold text-zinc-500 mb-3 tracking-widest px-1">Audit Log</div>
                 <div className="space-y-1">
-                  {[
-                    { action: 'Unit 404 checked in', time: '2 minutes ago' },
-                    { action: 'Zone 2 updated', time: '5 minutes ago' },
-                    { action: 'User beacon activated', time: '8 minutes ago' }
-                  ].map((log, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer group">
-                      <div className="w-1 h-8 bg-zinc-700 rounded-full group-hover:bg-cyan-500 transition-colors" />
-                      <div className="flex-1">
-                        <div className="text-xs text-zinc-300">{log.action}</div>
-                        <div className="text-[10px] text-zinc-600">{log.time}</div>
+                  {incidents.length === 0 && !incidentsLoading ? (
+                    <div className="text-xs text-zinc-600 px-1 py-2">No incidents reported</div>
+                  ) : (
+                    incidents.slice(0, 3).map((incident, i) => (
+                      <div key={incident.id ?? i} className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer group">
+                        <div className="w-1 h-8 bg-zinc-700 rounded-full group-hover:bg-cyan-500 transition-colors" />
+                        <div className="flex-1">
+                          <div className="text-xs text-zinc-300">{incident.display_name ?? incident.source ?? 'Incident reported'}</div>
+                          <div className="text-[10px] text-zinc-600" suppressHydrationWarning>{new Date(incident.created_at).toLocaleTimeString()}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </>
