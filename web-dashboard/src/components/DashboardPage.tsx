@@ -1,4 +1,4 @@
-import React, { useState, useId } from "react";
+import React, { useState, useId, useEffect } from "react";
 import {
   MoonIcon,
   SunIcon,
@@ -188,6 +188,36 @@ export const DashboardPage: React.FC = () => {
   // Active view state
   const [activeView, setActiveView] = useState<'dashboard' | 'zones' | 'patrol' | 'analytics' | 'incidents' | 'users' | 'responders' | 'settings'>('dashboard');
 
+  // Fly-to state: set when user clicks a beacon in the Active Users list
+  const [flyToLocation, setFlyToLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Profile map: user_id → { phone, full_name } fetched from profiles table
+  const [profiles, setProfiles] = useState<Record<string, { phone?: string; full_name?: string }>>({});
+
+  useEffect(() => {
+    if (!supabase || displayLocations.length === 0) {
+      setProfiles({});
+      return;
+    }
+    // Rebuild profiles map fresh on every locations change so re-logins with
+    // a new name (same UUID) always show current data rather than cached data.
+    const ids = displayLocations.map(l => l.user_id);
+    supabase
+      .from('profiles')
+      .select('id,full_name,phone')
+      .in('id', ids)
+      .order('id')
+      .then(({ data, error }) => {
+        if (error) console.error('profiles fetch error:', error.message);
+        const next: Record<string, { phone?: string; full_name?: string }> = {};
+        ids.forEach(id => { next[id] = {}; });
+        (data ?? []).forEach((p: any) => {
+          next[p.id] = { full_name: p.full_name ?? undefined, phone: p.phone ?? undefined };
+        });
+        setProfiles(next);
+      });
+  }, [displayLocations, supabase]);
+
   return (
     <div className="flex h-screen w-full bg-[#09090b] text-zinc-100 font-sans overflow-hidden dark">
 
@@ -269,6 +299,7 @@ export const DashboardPage: React.FC = () => {
                 supabaseEnabled={false}
                 mapStyle="mapbox://styles/mapbox/dark-v11"
                 showPatrolRoutes={false}
+                flyToLocation={flyToLocation}
               />
             </>
           )}
@@ -341,6 +372,48 @@ export const DashboardPage: React.FC = () => {
           {/* Only show these sections when NOT on Zones view */}
           {activeView !== 'zones' && (
             <>
+              {/* ACTIVE USERS — live beacons from Supabase */}
+              <div className="mb-6">
+                <div className="text-[10px] uppercase font-bold text-zinc-500 mb-3 tracking-widest px-1 flex items-center justify-between">
+                  <span>Active Users</span>
+                  <span className="text-cyan-500 font-mono">{displayLocations.length}</span>
+                </div>
+                {displayLocations.length === 0 ? (
+                  <div className="text-xs text-zinc-600 px-1 py-2">No active users online</div>
+                ) : (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {displayLocations.map((loc) => {
+                      const minsAgo = Math.round(
+                        (Date.now() - new Date(loc.updated_at).getTime()) / 60000
+                      );
+                      const isRecent = minsAgo < 2;
+                      const profile = profiles[loc.user_id];
+                      const label = profile?.full_name ?? profile?.phone ?? `${loc.user_id.slice(0, 8)}…`;
+                      return (
+                        <button
+                          key={loc.user_id}
+                          onClick={() => setFlyToLocation({ lat: loc.latitude, lng: loc.longitude })}
+                          className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-left group"
+                        >
+                          <div className={`w-2 h-2 rounded-full flex-none ${isRecent ? 'bg-cyan-500 animate-pulse' : 'bg-zinc-600'}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-zinc-300 font-mono truncate">
+                              {label}
+                            </div>
+                            <div className="text-[10px] text-zinc-600">
+                              {loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-none ${isRecent ? 'bg-cyan-500/20 text-cyan-400' : 'bg-zinc-700 text-zinc-400'}`}>
+                            {minsAgo === 0 ? 'now' : `${minsAgo}m`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div className="mb-6">
                 <div className="text-[10px] uppercase font-bold text-zinc-500 mb-3 tracking-widest px-1">Critical Alerts</div>
                 <DangerAlert

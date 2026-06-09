@@ -30,11 +30,11 @@ export const useRealtimeLocations = (supabase: SupabaseClient | null, pollingInt
     mesh_hop_count: 0
   }));
 
-  const [locations, setLocations] = useState<LiveLocation[]>(realLocations);
+  // Start empty when Supabase is connected; fake data only when offline
+  const [locations, setLocations] = useState<LiveLocation[]>(supabase ? [] : realLocations);
 
   useEffect(() => {
     if (!supabase) {
-      // If no Supabase client, use fake data
       setLocations(realLocations);
       return;
     }

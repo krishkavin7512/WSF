@@ -18,6 +18,7 @@ interface MapViewProps {
   showHeatmap?: boolean;
   mapStyle?: string;
   showPatrolRoutes?: boolean;
+  flyToLocation?: { lat: number; lng: number } | null;
 }
 
 // Helper: Check if point is inside a circle (for zone detection)
@@ -45,7 +46,8 @@ const MapView: React.FC<MapViewProps> = ({
   supabaseEnabled = false,
   showHeatmap = false,
   mapStyle = 'mapbox://styles/mapbox/dark-v11',
-  showPatrolRoutes = false
+  showPatrolRoutes = false,
+  flyToLocation = null
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -61,8 +63,8 @@ const MapView: React.FC<MapViewProps> = ({
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: mapStyle,
-      center: [79.1559, 12.9692], // VIT Vellore
-      zoom: 13.5,
+      center: [78.3663, 17.3422], // Lords Institute of Engineering & Technology, Hyderabad
+      zoom: 15,
       pitch: 0,
       attributionControl: false,
       renderWorldCopies: false // Prevent coordinate confusion
@@ -266,8 +268,9 @@ const MapView: React.FC<MapViewProps> = ({
 
     // Calculate pulse values (oscillate radius and opacity)
     const t = pulsePhase / 60;
-    const pulseRadius = 8 + Math.sin(t * Math.PI * 2) * 4; // 8-12 range (smaller)
-    const pulseOpacity = 0.3 + Math.sin(t * Math.PI * 2) * 0.4; // 0.3-0.7 range
+    const pulseRadius = 8 + Math.sin(t * Math.PI * 2) * 4; // 8-12 range
+    const sinVal = (1 + Math.sin(t * Math.PI * 2)) / 2; // 0-1, never negative
+    const pulseOpacity = 0.3 + sinVal * 0.4; // 0.3-0.7 range
 
     // Update red pulse layer
     if (map.current.getLayer('users-pulse-red')) {
@@ -281,6 +284,16 @@ const MapView: React.FC<MapViewProps> = ({
       map.current.setPaintProperty('users-pulse-yellow', 'circle-stroke-opacity', pulseOpacity * 0.8);
     }
   }, [pulsePhase, mapLoaded]);
+
+  // Fly to location when sidebar user is clicked
+  useEffect(() => {
+    if (!map.current || !mapLoaded || !flyToLocation) return;
+    map.current.flyTo({
+      center: [flyToLocation.lng, flyToLocation.lat],
+      zoom: 17,
+      duration: 1200
+    });
+  }, [flyToLocation, mapLoaded]);
 
   // Toggle patrol routes visibility based on prop
   useEffect(() => {

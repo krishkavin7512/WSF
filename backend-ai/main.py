@@ -80,14 +80,15 @@ def calculate_safe_route(request: RouteRequest):
     """
     Phase 2 Logic: Real AI Routing
     """
-    print(f"📍 Calculating Safe Route: {request.start_lat},{request.start_lng} -> {request.end_lat},{request.end_lng}")
-    
+    print(f"[SafeRoute] Request: {request.start_lat},{request.start_lng} -> {request.end_lat},{request.end_lng}")
+
+    # Zone fetch is best-effort — if it fails, route without safety scoring.
     try:
         dynamic_zones = _fetch_dynamic_zones()
-    except HTTPException:
-        raise
+        print(f"[SafeRoute] Loaded {len(dynamic_zones)} zones")
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch zones: {exc}")
+        print(f"[SafeRoute] Zone fetch failed (non-fatal): {exc}")
+        dynamic_zones = []
 
     result = find_safest_route(
         request.start_lat,
@@ -97,7 +98,7 @@ def calculate_safe_route(request: RouteRequest):
         dynamic_zones,
     )
 
-    if result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=result.get("message", "Routing failed"))
-
+    # Always return 200 so Flutter can read the status/message field.
+    # Raising 500 causes Flutter to receive null and show a generic error.
+    print(f"[SafeRoute] Result status: {result.get('status')}")
     return result

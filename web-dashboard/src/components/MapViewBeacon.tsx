@@ -22,8 +22,8 @@ export default function MapView() {
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/dark-v11', // Professional Night Mode
-      center: [79.1559, 12.9692], // VIT Vellore
-      zoom: 13.5,
+      center: [78.3663, 17.3422], // Lords Institute of Engineering & Technology, Hyderabad
+      zoom: 15,
       pitch: 45, // 3D Tilt for Command Center feel
       attributionControl: false
     });

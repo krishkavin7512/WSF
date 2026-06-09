@@ -7,3 +7,5 @@ scikit-learn
 shapely>=2.0.0
 numpy
 python-dotenv
+scipy>=1.11.0
+pandas>=2.0.0
