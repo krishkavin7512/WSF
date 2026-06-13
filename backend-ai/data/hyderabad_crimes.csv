@@ -699,3 +699,50 @@ latitude,longitude,crime_type,severity,hour,date,area_name
 17.338714,78.373005,theft,2,2,2023-03-12,Himayat Sagar Fringe
 17.340479,78.371599,assault,3,18,2023-05-07,Himayat Sagar Fringe
 17.336774,78.371952,theft,2,22,2023-01-30,Himayat Sagar Fringe
+17.3415,78.3658,eve_teasing,2,21,2023-08-14,Lords Main Gate
+17.3428,78.3671,stalking,2,22,2024-03-09,Lords Main Gate
+17.3419,78.3655,harassment,3,0,2023-11-27,Lords Main Gate
+17.3430,78.3659,assault,2,23,2024-06-15,Lords Main Gate
+17.3424,78.3668,eve_teasing,3,20,2023-04-22,Lords Main Gate
+17.3413,78.3665,stalking,2,1,2024-09-03,Lords Main Gate
+17.3427,78.3656,harassment,2,22,2023-07-18,Lords Main Gate
+17.3421,78.3672,robbery,3,3,2024-01-11,Lords Main Gate
+17.3409,78.3598,stalking,2,23,2023-05-19,Lords ORR West Road
+17.3421,78.3612,eve_teasing,3,20,2024-02-28,Lords ORR West Road
+17.3412,78.3608,harassment,2,21,2023-10-07,Lords ORR West Road
+17.3418,78.3600,assault,2,22,2024-07-24,Lords ORR West Road
+17.3408,78.3610,stalking,3,0,2023-12-16,Lords ORR West Road
+17.3422,78.3604,eve_teasing,2,19,2024-04-30,Lords ORR West Road
+17.3415,78.3615,harassment,2,23,2023-09-02,Lords ORR West Road
+17.3462,78.3665,robbery,2,22,2024-08-11,Lords Himayat Sagar North
+17.3474,78.3679,eve_teasing,3,21,2023-03-25,Lords Himayat Sagar North
+17.3467,78.3668,stalking,2,0,2024-11-19,Lords Himayat Sagar North
+17.3471,78.3676,harassment,3,23,2023-06-30,Lords Himayat Sagar North
+17.3460,78.3671,assault,2,20,2024-01-08,Lords Himayat Sagar North
+17.3475,78.3665,eve_teasing,2,2,2023-09-14,Lords Himayat Sagar North
+17.3376,78.3652,stalking,2,22,2024-05-07,Lords South Gate
+17.3385,78.3664,eve_teasing,2,21,2023-08-23,Lords South Gate
+17.3379,78.3658,harassment,3,23,2024-10-12,Lords South Gate
+17.3388,78.3655,stalking,2,20,2023-02-17,Lords South Gate
+17.3374,78.3663,assault,2,1,2024-07-29,Lords South Gate
+17.3387,78.3712,eve_teasing,3,22,2023-11-04,Lords Isolated Bus Stop
+17.3396,78.3724,stalking,2,23,2024-04-16,Lords Isolated Bus Stop
+17.3390,78.3718,harassment,2,21,2023-07-08,Lords Isolated Bus Stop
+17.3398,78.3715,robbery,2,0,2024-02-23,Lords Isolated Bus Stop
+17.3384,78.3721,eve_teasing,3,20,2023-10-31,Lords Isolated Bus Stop
+17.3443,78.3631,stalking,2,23,2024-06-14,Lords Service Road West
+17.3452,78.3643,eve_teasing,2,21,2023-04-29,Lords Service Road West
+17.3446,78.3638,harassment,3,22,2024-09-07,Lords Service Road West
+17.3455,78.3635,assault,2,1,2023-12-22,Lords Service Road West
+17.3403,78.3582,stalking,3,22,2024-03-18,Lords ORR Ramp Junction
+17.3412,78.3594,eve_teasing,2,20,2023-07-13,Lords ORR Ramp Junction
+17.3406,78.3588,harassment,2,23,2024-10-25,Lords ORR Ramp Junction
+17.3415,78.3585,assault,2,21,2023-01-09,Lords ORR Ramp Junction
+17.3433,78.3692,stalking,2,22,2024-08-03,Lords Hostel Access Road
+17.3442,78.3704,eve_teasing,3,21,2023-05-27,Lords Hostel Access Road
+17.3436,78.3698,harassment,2,0,2024-11-30,Lords Hostel Access Road
+17.3445,78.3695,robbery,2,23,2023-09-18,Lords Hostel Access Road
+17.3353,78.3686,eve_teasing,2,22,2024-06-09,Lords South Stretch
+17.3362,78.3698,stalking,3,20,2023-11-21,Lords South Stretch
+17.3356,78.3692,harassment,2,1,2024-02-14,Lords South Stretch
+17.3364,78.3689,assault,2,23,2023-08-06,Lords South Stretch

@@ -23,7 +23,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import MapView, { HeatmapZone } from "./MapView";
+import MapView, { HeatmapZone, DynamicZone } from "./MapView";
 import { ZoneManagement } from "./ZoneManagement";
 import { AnalyticsView } from "./AnalyticsView";
 import { IncidentsView } from "./IncidentsView";
@@ -214,8 +214,24 @@ export const DashboardPage: React.FC = () => {
       .select('*')
       .eq('city', 'hyderabad')
       .then(({ data, error }) => {
-        if (error) console.error('heatmap fetch error:', error.message);
+        if (error) { console.error('heatmap fetch error:', error.message); return; }
+        console.log(`[Heatmap] Fetched ${data?.length ?? 0} hyderabad zones`);
         setHeatmapZones((data as HeatmapZone[]) ?? []);
+      });
+  }, [supabase]);
+
+  // Dynamic zones (incident-derived polygons from dynamic_zones table)
+  const [dynamicZones, setDynamicZones] = useState<DynamicZone[]>([]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase
+      .from('dynamic_zones')
+      .select('id,risk_level,boundary')
+      .then(({ data, error }) => {
+        if (error) { console.error('dynamic_zones fetch error:', error.message); return; }
+        console.log(`[DynamicZones] Fetched ${data?.length ?? 0} zones`);
+        setDynamicZones((data as DynamicZone[]) ?? []);
       });
   }, [supabase]);
 
@@ -282,7 +298,7 @@ export const DashboardPage: React.FC = () => {
             <button
               onClick={() => setShowHeatmap(h => !h)}
               title="Toggle Heatmap"
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${showHeatmap ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-white/5 text-zinc-400 border border-white/10 hover:border-white/20'}`}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${showHeatmap ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-white/5 text-zinc-400 border border-white/10 hover:border-white/20'}`}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
               Heatmap
@@ -302,16 +318,17 @@ export const DashboardPage: React.FC = () => {
               <MapView
                 incidents={incidents}
                 locations={displayLocations}
-                zones={zones}
+                zones={[]}
                 selectedIncidentId={null}
                 onSelectIncident={() => { }}
                 loading={false}
-                supabaseEnabled={false}
+                supabaseEnabled={true}
                 mapStyle="mapbox://styles/mapbox/dark-v11"
                 showPatrolRoutes={false}
                 flyToLocation={flyToLocation}
                 showHeatmap={showHeatmap}
                 heatmapZones={heatmapZones}
+                dynamicZones={dynamicZones}
               />
             </>
           )}
