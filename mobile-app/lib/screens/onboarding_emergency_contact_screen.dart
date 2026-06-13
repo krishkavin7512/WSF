@@ -75,7 +75,7 @@ class _OnboardingEmergencyContactScreenState
 
     setState(() => _isSaving = true);
     try {
-      await ProfileRepository.instance.addEmergencyContact(
+      await ProfileRepository.instance.saveEmergencyContact(
         userId: userId,
         contactName: _nameController.text.trim(),
         contactNumber: formatted,
@@ -180,17 +180,6 @@ class _OnboardingEmergencyContactScreenState
                                   ),
                                 )
                               : const Text('Finish setup'),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Soft skip — hides the option in production but keeps
-                      // the flow unblocked if needed for testing.
-                      TextButton(
-                        onPressed: _isSaving ? null : widget.onComplete,
-                        child: Text(
-                          'Skip for now',
-                          style: SentraDesign.caption(
-                              color: SentraDesign.mutedGray),
                         ),
                       ),
                     ],

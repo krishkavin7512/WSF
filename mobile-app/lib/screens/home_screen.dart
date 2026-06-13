@@ -22,6 +22,7 @@ import 'package:mobile_app/services/location_service.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io' show Platform;
+import 'profile_screen.dart';
 // AI integration — isolated service + overlay (do not modify api_service.dart)
 import 'package:mobile_app/services/ai_api_service.dart';
 import 'package:mobile_app/screens/chat_overlay.dart';
@@ -131,9 +132,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   int _navIndex = 0;
 
+  // Slide animations for bottom panel + nav bar when search is open
+  late AnimationController _bottomSlideController;
+  late Animation<Offset> _bottomSlideAnimation;
+  final PanelController _panelController = PanelController();
+
   @override
   void initState() {
     super.initState();
+    _bottomSlideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _bottomSlideAnimation = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(0, 1),
+    ).animate(CurvedAnimation(
+      parent: _bottomSlideController,
+      curve: Curves.easeInOut,
+    ));
     _startController.text = "Current Location";
     _initAudioSentinel();
     _initVolumeDownOverride();
@@ -161,6 +178,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _volumeDownSubscription?.cancel();
     _audioSentinel.stopListening();
     _deterrentPlayer.dispose();
+    _bottomSlideController.dispose();
     super.dispose();
   }
 
@@ -207,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           final insertResult = await supabase.from('incidents').insert({
             'user_id':      userId,
             'source':       'audio',
-            'severity':     3,
+            'severity':     'high',
             'status':       'open',
             'latitude':     _startLat,
             'longitude':    _startLng,
@@ -694,6 +712,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final double lat = point.coordinates.lat.toDouble();
     final double lng = point.coordinates.lng.toDouble();
 
+    _bottomSlideController.forward();
+    _panelController.hide();
     setState(() {
       _isInputExpanded = true;
       _destLat = lat;
@@ -760,6 +780,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _isSearchLoading = true;
       _isInputExpanded = false;
     });
+    _bottomSlideController.reverse();
+    _panelController.show();
 
     final place = await _mapboxService.retrievePlace(
       mapboxId,
@@ -1138,6 +1160,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SlidingUpPanel(
+        controller: _panelController,
         maxHeight: _isPendingRoute ? 0 : 450,
         minHeight: _isPendingRoute ? 0 : 180,
         parallaxEnabled: !_isPendingRoute,
@@ -1249,7 +1272,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: SafeArea(
         child: GestureDetector(
           onTap: () {
-            if (!_isInputExpanded) setState(() => _isInputExpanded = true);
+            if (!_isInputExpanded) {
+              setState(() => _isInputExpanded = true);
+              _bottomSlideController.forward();
+              _panelController.hide();
+            }
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
@@ -1346,6 +1373,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   });
                   _startFocus.unfocus();
                   _destinationFocus.unfocus();
+                  _bottomSlideController.reverse();
+                  _panelController.show();
                 },
                 child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
               ),
@@ -1431,6 +1460,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           setState(() => _isInputExpanded = false);
                           _startFocus.unfocus();
                           _destinationFocus.unfocus();
+                          _bottomSlideController.reverse();
+                          _panelController.show();
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text("Tap on the map to select destination"),
@@ -2131,116 +2162,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> _showProfileSheet() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    print(
-        '[Profile] Fetching profile for user: ${user?.id} | meta_name: ${user?.userMetadata?['full_name']} | phone: ${user?.phone}');
-    String? fullName;
-    String? phone;
-    try {
-      if (user != null) {
-        final row = await Supabase.instance.client
-            .from('profiles')
-            .select('full_name,phone')
-            .eq('id', user.id)
-            .maybeSingle();
-        fullName = row?['full_name'] as String?;
-        phone = row?['phone'] as String?;
-      }
-    } catch (_) {}
-
-    // Auth session metadata is always current (set at OTP verify time).
-    // Prefer it over the DB row, which may be stale from a previous user.
-    final metaName = user?.userMetadata?['full_name'] as String?;
-    final authPhone = user?.phone;
-    fullName = metaName?.isNotEmpty == true
-        ? metaName
-        : (fullName?.isNotEmpty == true ? fullName : metaName);
-    phone = authPhone?.isNotEmpty == true
-        ? authPhone
-        : (phone?.isNotEmpty == true ? phone : authPhone);
-
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: SentraDesign.pureWhite,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Account',
-                  style: GoogleFonts.inter(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: SentraDesign.uberBlack,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  fullName ?? '—',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: SentraDesign.uberBlack,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  phone ?? user?.email ?? '—',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: SentraDesign.bodyGray,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'ID: ${user?.id ?? "—"}',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: SentraDesign.mutedGray,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await LocationService().clearLocation();
-                      await LocationService().dispose();
-                      await Supabase.instance.client.auth.signOut();
-                      if (ctx.mounted) Navigator.of(ctx).pop();
-                    },
-                    child: const Text('Sign out'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: BottomNavigationBar(
+    return SlideTransition(
+      position: _bottomSlideAnimation,
+      child: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 20,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _navIndex,
         backgroundColor: SentraDesign.pureWhite,
@@ -2258,7 +2193,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           if (index == 1) {
             _handleSosSequence();
           } else if (index == 2) {
-            _showProfileSheet();
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            );
           }
         },
         items: [
@@ -2298,6 +2236,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             label: "Profile",
           ),
         ],
+      ),
       ),
     );
   }

@@ -110,24 +110,28 @@ class _AuthShellState extends State<AuthShell> {
 
   Future<void> _checkOnboardingStatus(String userId) async {
     try {
+      // registration_complete is the single official gate. If it's set, the
+      // user is fully onboarded — go straight to Home.
+      final registrationDone =
+          await ProfileRepository.instance.isRegistrationComplete(userId);
+
+      if (!mounted) return;
+
+      if (registrationDone) {
+        setState(() => _step = _OnboardingStep.complete);
+        return;
+      }
+
+      // Not complete — figure out which step to resume from. Personal info
+      // (age) is Step 1; the emergency contact is Step 2.
       final personalDone =
           await ProfileRepository.instance.isPersonalInfoComplete(userId);
 
       if (!mounted) return;
 
-      if (!personalDone) {
-        setState(() => _step = _OnboardingStep.needsPersonalInfo);
-        return;
-      }
-
-      final contactDone =
-          await ProfileRepository.instance.hasEmergencyContact(userId);
-
-      if (!mounted) return;
-
-      setState(() => _step = contactDone
-          ? _OnboardingStep.complete
-          : _OnboardingStep.needsEmergencyContact);
+      setState(() => _step = personalDone
+          ? _OnboardingStep.needsEmergencyContact
+          : _OnboardingStep.needsPersonalInfo);
     } catch (_) {
       // Network failure during check — let the user through rather than
       // blocking them on a loading spinner indefinitely.

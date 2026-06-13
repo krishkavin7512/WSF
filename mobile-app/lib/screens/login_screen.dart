@@ -14,11 +14,12 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _otpController = TextEditingController();
+  final _nameController  = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _otpController   = TextEditingController();
 
-  bool _isOtpSent = false;
+  bool _isRegister   = true;  // true = Register, false = Login
+  bool _isOtpSent    = false;
   bool _isSubmitting = false;
 
   @override
@@ -27,13 +28,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _phoneController.dispose();
     _otpController.dispose();
     super.dispose();
-  }
-
-  void _showError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
   }
 
   /// E.164: if input starts with `+`, keep country code + digits; else default +91.
@@ -48,19 +42,17 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     var digits = trimmed.replaceAll(RegExp(r'\D'), '');
-    if (digits.startsWith('0')) {
-      digits = digits.substring(1);
-    }
-    if (digits.length == 11 && digits.startsWith('91')) {
-      return '+$digits';
-    }
-    if (digits.length == 10) {
-      return '+91$digits';
-    }
-    if (digits.length >= 10) {
-      return '+91${digits.substring(digits.length - 10)}';
-    }
+    if (digits.startsWith('0')) digits = digits.substring(1);
+    if (digits.length == 11 && digits.startsWith('91')) return '+$digits';
+    if (digits.length == 10) return '+91$digits';
+    if (digits.length >= 10) return '+91${digits.substring(digits.length - 10)}';
     return null;
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _sendOtp() async {
@@ -76,17 +68,19 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await Supabase.instance.client.auth.signInWithOtp(
         phone: formatted,
-        data: {'full_name': _nameController.text.trim()},
+        data: _isRegister
+            ? {'full_name': _nameController.text.trim()}
+            : null,
       );
       if (!mounted) return;
       setState(() {
-        _isOtpSent = true;
+        _isOtpSent    = true;
         _isSubmitting = false;
       });
     } on AuthException catch (e) {
       if (mounted) setState(() => _isSubmitting = false);
       _showError(e.message);
-    } catch (e) {
+    } catch (_) {
       if (mounted) setState(() => _isSubmitting = false);
       _showError('Could not send OTP. Try again.');
     }
@@ -104,7 +98,6 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final enteredName = _nameController.text.trim();
     setState(() => _isSubmitting = true);
     try {
       await Supabase.instance.client.auth.verifyOTP(
@@ -112,42 +105,40 @@ class _LoginScreenState extends State<LoginScreen> {
         token: token,
         type: OtpType.sms,
       );
-      // Force-update metadata so returning users get the name they just typed,
-      // not the name from their first ever signup (signInWithOtp data: is ignored
-      // for existing users).
-      if (enteredName.isNotEmpty) {
-        try {
-          await Supabase.instance.client.auth.updateUser(
-            UserAttributes(data: {'full_name': enteredName}),
-          );
-        } catch (_) {}
+
+      if (_isRegister) {
+        final enteredName = _nameController.text.trim();
+        // Force-update metadata and profile with the typed name.
+        if (enteredName.isNotEmpty) {
+          try {
+            await Supabase.instance.client.auth.updateUser(
+              UserAttributes(data: {'full_name': enteredName}),
+            );
+          } catch (_) {}
+        }
+        final uid   = Supabase.instance.client.auth.currentUser?.id;
+        final phone = Supabase.instance.client.auth.currentUser?.phone;
+        if (uid != null) {
+          try {
+            await Supabase.instance.client.from('profiles').upsert({
+              'id': uid,
+              'full_name': enteredName.isNotEmpty ? enteredName : null,
+              'phone': phone,
+            }, onConflict: 'id');
+          } catch (_) {}
+        }
       }
-      // Upsert profiles table immediately with the typed name.
-      // This must happen here — not in HomeScreen._ensureProfile() — because
-      // onAuthStateChange fires concurrently with updateUser, so _ensureProfile
-      // can read stale metadata and overwrite the profile with the old name.
-      final uid = Supabase.instance.client.auth.currentUser?.id;
-      final phone = Supabase.instance.client.auth.currentUser?.phone;
-      if (uid != null) {
-        try {
-          await Supabase.instance.client.from('profiles').upsert({
-            'id': uid,
-            'full_name': enteredName.isNotEmpty ? enteredName : null,
-            'phone': phone,
-          }, onConflict: 'id');
-        } catch (_) {}
-      }
+
       if (!mounted) return;
       setState(() => _isSubmitting = false);
-      if (Supabase.instance.client.auth.currentUser != null) {
-        // AuthShell switches to HomeScreen via onAuthStateChange.
-      } else {
+      if (Supabase.instance.client.auth.currentUser == null) {
         _showError('Verification failed.');
       }
+      // AuthShell handles navigation via onAuthStateChange.
     } on AuthException catch (e) {
       if (mounted) setState(() => _isSubmitting = false);
       _showError(e.message);
-    } catch (e) {
+    } catch (_) {
       if (mounted) setState(() => _isSubmitting = false);
       _showError('Could not verify OTP.');
     }
@@ -156,6 +147,16 @@ class _LoginScreenState extends State<LoginScreen> {
   void _resetPhoneStep() {
     setState(() {
       _isOtpSent = false;
+      _otpController.clear();
+    });
+  }
+
+  void _toggleMode() {
+    setState(() {
+      _isRegister   = !_isRegister;
+      _isOtpSent    = false;
+      _nameController.clear();
+      _phoneController.clear();
       _otpController.clear();
     });
   }
@@ -172,66 +173,53 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const SizedBox(height: 24),
                 Text(
                   'SENTRA',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 32,
                     fontWeight: FontWeight.w700,
-                    height: 1.22,
                     color: SentraDesign.uberBlack,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Sign in with your phone',
+                  _isRegister ? 'Create your account' : 'Welcome back',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    height: 1.5,
                     color: SentraDesign.bodyGray,
                   ),
                 ),
-                const SizedBox(height: 40),
-                Text(
-                  'Full name',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: SentraDesign.bodyGray,
-                  ),
+                const SizedBox(height: 32),
+
+                // ── Mode toggle ──────────────────────────────────────────
+                _ModeToggle(
+                  isRegister: _isRegister,
+                  onToggle: _isOtpSent ? null : _toggleMode,
                 ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _nameController,
-                  enabled: !_isOtpSent,
-                  textCapitalization: TextCapitalization.words,
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: SentraDesign.uberBlack,
+                const SizedBox(height: 32),
+
+                // ── Name field (register only) ───────────────────────────
+                if (_isRegister) ...[
+                  _label('Full name'),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _nameController,
+                    enabled: !_isOtpSent,
+                    textCapitalization: TextCapitalization.words,
+                    style: _textStyle(),
+                    decoration: _inputDeco('Your full name'),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Name is required'
+                        : null,
                   ),
-                  decoration: InputDecoration(
-                    hintText: 'Your name',
-                    hintStyle: GoogleFonts.inter(color: SentraDesign.mutedGray),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Name is required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Phone number',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: SentraDesign.bodyGray,
-                  ),
-                ),
+                  const SizedBox(height: 20),
+                ],
+
+                // ── Phone field ──────────────────────────────────────────
+                _label('Phone number'),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _phoneController,
@@ -240,76 +228,65 @@ class _LoginScreenState extends State<LoginScreen> {
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s-]')),
                   ],
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: SentraDesign.uberBlack,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: '+91 or 10-digit number',
-                    hintStyle: GoogleFonts.inter(color: SentraDesign.mutedGray),
-                  ),
+                  style: _textStyle(),
+                  decoration: _inputDeco('+91 or 10-digit number'),
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Phone is required';
-                    }
-                    if (_formatPhoneE164(v) == null) {
-                      return 'Invalid phone number';
-                    }
+                    if (v == null || v.trim().isEmpty) return 'Phone is required';
+                    if (_formatPhoneE164(v) == null) return 'Invalid phone number';
                     return null;
                   },
                 ),
+
+                // ── OTP field ────────────────────────────────────────────
                 if (_isOtpSent) ...[
                   const SizedBox(height: 20),
-                  Text(
-                    'One-time code',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: SentraDesign.bodyGray,
-                    ),
-                  ),
+                  _label('One-time code'),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _otpController,
                     keyboardType: TextInputType.number,
-                    style: GoogleFonts.inter(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: SentraDesign.uberBlack,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'SMS code',
-                      hintStyle:
-                          GoogleFonts.inter(color: SentraDesign.mutedGray),
-                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    style: _textStyle(),
+                    decoration: _inputDeco('Code from SMS'),
                   ),
                 ],
+
                 const SizedBox(height: 32),
+
+                // ── Primary action ───────────────────────────────────────
                 SizedBox(
-                  width: double.infinity,
-                  height: 48,
+                  height: 50,
                   child: ElevatedButton(
                     onPressed: _isSubmitting
                         ? null
                         : (_isOtpSent ? _verifyOtp : _sendOtp),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: SentraDesign.uberBlack,
+                      foregroundColor: SentraDesign.pureWhite,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
                     child: _isSubmitting
                         ? const SizedBox(
-                            height: 22,
-                            width: 22,
+                            height: 22, width: 22,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: SentraDesign.pureWhite,
-                            ),
-                          )
-                        : Text(_isOtpSent ? 'Verify' : 'Send OTP'),
+                              strokeWidth: 2, color: SentraDesign.pureWhite))
+                        : Text(
+                            _isOtpSent
+                                ? 'Verify'
+                                : (_isRegister ? 'Send OTP' : 'Send OTP'),
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.w600, fontSize: 16),
+                          ),
                   ),
                 ),
+
                 if (_isOtpSent) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   TextButton(
-                    onPressed:
-                        _isSubmitting ? null : _resetPhoneStep,
+                    onPressed: _isSubmitting ? null : _resetPhoneStep,
                     child: Text(
                       'Change number',
                       style: GoogleFonts.inter(
@@ -322,6 +299,106 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  TextStyle _textStyle() => GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        color: SentraDesign.uberBlack,
+      );
+
+  Widget _label(String text) => Text(
+        text,
+        style: GoogleFonts.inter(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: SentraDesign.bodyGray,
+        ),
+      );
+
+  InputDecoration _inputDeco(String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.inter(color: SentraDesign.mutedGray),
+      );
+}
+
+// ── Mode toggle widget ────────────────────────────────────────────────────────
+
+class _ModeToggle extends StatelessWidget {
+  final bool isRegister;
+  final VoidCallback? onToggle;
+
+  const _ModeToggle({required this.isRegister, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F0F0),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _Tab(
+            label: 'Register',
+            selected: isRegister,
+            onTap: (!isRegister && onToggle != null) ? onToggle : null,
+          ),
+          _Tab(
+            label: 'Login',
+            selected: !isRegister,
+            onTap: (isRegister && onToggle != null) ? onToggle : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Tab extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _Tab({required this.label, required this.selected, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: selected ? SentraDesign.pureWhite : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(20),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: selected
+                    ? SentraDesign.uberBlack
+                    : SentraDesign.mutedGray,
+              ),
             ),
           ),
         ),
