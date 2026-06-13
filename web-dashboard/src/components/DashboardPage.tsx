@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   MoonIcon,
   SunIcon,
@@ -76,6 +76,12 @@ export const DashboardPage: React.FC = () => {
       });
   }, [supabase]);
 
+  const usersWithAudioThreat = useMemo(() => new Set(
+    incidents
+      .filter(i => i.source === 'audio' && i.status === 'open' && i.user_id)
+      .map(i => i.user_id!)
+  ), [incidents]);
+
   const criticalAlertsCount = incidents.filter(i => i.severity === 'high' && i.status === 'open').length;
   const activeUsersCount = displayLocations.length;
   const usersInDangerCount = 0; // Keeping logic aligned with current capabilities while matching UI
@@ -142,7 +148,8 @@ export const DashboardPage: React.FC = () => {
             mapStyle="mapbox://styles/mapbox/light-v11"
             showPatrolRoutes={false}
             flyToLocation={flyToLocation}
-dynamicZones={dynamicZones}
+            dynamicZones={dynamicZones}
+            usersWithAudioThreat={usersWithAudioThreat}
           />
         </div>
       </main>
@@ -213,16 +220,21 @@ dynamicZones={dynamicZones}
                   {displayLocations.map((loc) => {
                     const profile = profiles[loc.user_id];
                     const label = profile?.full_name ?? profile?.phone ?? `${loc.user_id.slice(0, 8)}…`;
+                    const hasThreat = usersWithAudioThreat.has(loc.user_id);
                     return (
                       <button
                         key={loc.user_id}
                         onClick={() => setFlyToLocation({ lat: loc.latitude, lng: loc.longitude })}
                         className="w-full flex items-center gap-3 p-2 rounded hover:bg-zinc-50 transition-colors cursor-pointer text-left"
                       >
-                        <div className="w-2 h-2 rounded-full flex-none bg-[#60A5FA]" />
+                        <div className={`w-2 h-2 rounded-full flex-none ${hasThreat ? 'sentra-threat-dot' : 'bg-[#60A5FA]'}`} />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-zinc-900 truncate">{label}</div>
-                          <div className="text-xs text-zinc-500">{loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}</div>
+                          {hasThreat ? (
+                            <div className="text-xs text-red-500 font-medium">Threat detected</div>
+                          ) : (
+                            <div className="text-xs text-zinc-500">{loc.latitude.toFixed(4)}, {loc.longitude.toFixed(4)}</div>
+                          )}
                         </div>
                       </button>
                     );
