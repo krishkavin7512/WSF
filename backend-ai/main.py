@@ -13,6 +13,7 @@ env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
 from routes.safenav import find_safest_route
+from routes.ai_assistant import router as ai_router
 
 app = FastAPI(title="Sentra AI Backend", version="1.0")
 
@@ -57,6 +58,8 @@ class RouteRequest(BaseModel):
     user_id: Optional[str] = "guest"
 
 # --- 5. API ENDPOINTS ---
+
+app.include_router(ai_router, prefix="/ai", tags=["Sarvam AI"])
 
 @app.get("/")
 def health_check():

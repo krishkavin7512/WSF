@@ -22,6 +22,11 @@ import 'package:mobile_app/services/location_service.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io' show Platform;
+// AI integration — isolated service + overlay (do not modify api_service.dart)
+import 'package:mobile_app/services/ai_api_service.dart';
+import 'package:mobile_app/screens/chat_overlay.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:perfect_volume_control/perfect_volume_control.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -41,6 +46,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   final ApiService _apiService = ApiService();
   final MapboxService _mapboxService = MapboxService();
+  // AI deterrent
+  final AiApiService _aiApiService = AiApiService();
+  final AudioPlayer _deterrentPlayer = AudioPlayer();
+  bool _isDeterrentLoading = false;
 
   // Audio Sentinel Service
   final AudioSentinelService _audioSentinel = AudioSentinelService();
@@ -151,6 +160,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _debounce?.cancel();
     _volumeDownSubscription?.cancel();
     _audioSentinel.stopListening();
+    _deterrentPlayer.dispose();
     super.dispose();
   }
 
@@ -482,6 +492,84 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     }
     await _polygonManager?.createMulti(polygonOptions);
+  }
+
+  // --- AI DETERRENT ---
+
+  /// Triggers the Sarvam Bulbul V3 audio deterrent.
+  /// Adjustment #1: volume override BEFORE play, stop before play.
+  /// Adjustment #2: instant state lock + haptic on press.
+  /// Adjustment #3: synchronous cached GPS read — never hangs.
+  Future<void> _triggerAiDeterrent() async {
+    // #2 — Instant state lock prevents double-fire during API latency
+    if (_isDeterrentLoading) return;
+    HapticFeedback.vibrate(); // Immediate physical confirmation
+    setState(() => _isDeterrentLoading = true);
+
+    try {
+      // #3 — Read cached location synchronously; never request a fresh GPS fix
+      final cached = LocationService().getCurrentLocation();
+      final double lat = cached?.lat ?? _startLat;
+      final double lng = cached?.lng ?? _startLng;
+
+      final data = await _aiApiService.triggerDeterrent(
+        lat: lat,
+        lng: lng,
+        language: 'en-IN',
+      );
+
+      if (data == null || data.audioBase64.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Deterrent unavailable. Stay alert.')),
+          );
+        }
+        return;
+      }
+
+      // Decode Base64 → Uint8List in memory — no disk writes
+      final bytes = base64Decode(data.audioBase64);
+
+      // #1 — Await volume override COMPLETELY before play
+      await PerfectVolumeControl.setVolume(1.0);
+      // Stop any in-flight audio to prevent overlap
+      await _deterrentPlayer.stop();
+      // Play in-memory bytes via BytesSource
+      await _deterrentPlayer.play(BytesSource(bytes));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(data.script),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      print('[Deterrent] Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Deterrent failed. Triggering SOS.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDeterrentLoading = false);
+    }
+  }
+
+  void _openChatOverlay() {
+    // #3 — Synchronous cached GPS read
+    final cached = LocationService().getCurrentLocation();
+    final double lat = cached?.lat ?? _startLat;
+    final double lng = cached?.lng ?? _startLng;
+
+    // #4 — isScrollControlled:true allows keyboard insets inside the sheet
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChatOverlay(lat: lat, lng: lng),
+    );
   }
 
   // --- SOS LOGIC ---
@@ -1096,6 +1184,53 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     color: Colors.white,
                     size: 18,
                   ),
+                ),
+              ),
+            ),
+            // ── AI Action Buttons ───────────────────────────────────────
+            Positioned(
+              top: 174,
+              right: 12,
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    // SENTRA Chat button
+                    FloatingActionButton.small(
+                      heroTag: 'ai_chat',
+                      backgroundColor: SentraDesign.uberBlack,
+                      onPressed: _openChatOverlay,
+                      tooltip: 'SENTRA Chat',
+                      child: const Icon(
+                        Icons.chat_bubble_outline,
+                        color: SentraDesign.pureWhite,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Audio Deterrent button
+                    FloatingActionButton.small(
+                      heroTag: 'ai_deterrent',
+                      backgroundColor: _isDeterrentLoading
+                          ? SentraDesign.bodyGray
+                          : SentraDesign.uberBlack,
+                      onPressed: _isDeterrentLoading ? null : _triggerAiDeterrent,
+                      tooltip: 'Audio Deterrent',
+                      child: _isDeterrentLoading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                color: SentraDesign.pureWhite,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.volume_up,
+                              color: SentraDesign.pureWhite,
+                              size: 18,
+                            ),
+                    ),
+                  ],
                 ),
               ),
             ),
