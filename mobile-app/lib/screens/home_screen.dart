@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -21,6 +21,8 @@ import 'package:mobile_app/services/geofence_service.dart';
 import 'package:mobile_app/services/location_service.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:io' show Platform;
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -173,7 +175,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     await _audioSentinel.initialize();
     _audioSentinel.onDangerDetected = (event, confidence) {
       if (mounted && ModalRoute.of(context)?.isCurrent == true) {
-        _showDriftOverlay();
+        _showDriftOverlay(
+            dangerReason: "Danger incoming...\n${event.toUpperCase()} detected.\nIf you do not respond, we will trigger an SOS dispatch.");
       }
     };
     _audioSentinel.startListening();
@@ -181,13 +184,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _initVolumeDownOverride() {
-    _volumeDownSubscription =
-        _volumeButtonChannel.receiveBroadcastStream().listen(
-      (_) => _onVolumeDownPressed(),
-      onError: (error) {
-        print('Volume button listener error: $error');
-      },
-    );
+    if (!Platform.isAndroid) return;
+    try {
+      _volumeDownSubscription =
+          _volumeButtonChannel.receiveBroadcastStream().listen(
+        (_) => _onVolumeDownPressed(),
+        onError: (error) {
+          print('Volume button listener error: $error');
+        },
+      );
+    } catch (e) {
+      print('Hardware buttons error: $e');
+    }
   }
 
   void _onVolumeDownPressed() {
@@ -402,14 +410,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   // --- SOS LOGIC ---
-  void _showDriftOverlay() async {
+  void _showDriftOverlay({String? dangerReason}) async {
     bool isSafe = await showGeneralDialog<bool>(
           context: context,
           barrierDismissible: false,
           barrierColor: Colors.black.withOpacity(0.95),
           transitionDuration: const Duration(milliseconds: 300),
           pageBuilder: (context, anim1, anim2) {
-            return const DriftSosOverlay();
+            return DriftSosOverlay(dangerReason: dangerReason);
           },
         ) ??
         false;
@@ -424,7 +432,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         print("Failed to dispatch SOS to Db: $e");
       }
       _handleSosSequence(
-          triggerReason: "No response after straying from expected route.");
+          triggerReason: dangerReason ?? "No response after straying from expected route.");
     }
   }
 
@@ -2343,7 +2351,8 @@ class _SosCountdownDialogState extends State<SosCountdownDialog>
 }
 
 class DriftSosOverlay extends StatefulWidget {
-  const DriftSosOverlay({super.key});
+  final String? dangerReason;
+  const DriftSosOverlay({super.key, this.dangerReason});
 
   static void dismissIfActive() {
     _DriftSosOverlayState.activeInstance?._dismissForOverride();
@@ -2418,7 +2427,7 @@ class _DriftSosOverlayState extends State<DriftSosOverlay> {
                     fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
             Text(
-                "You strayed from your requested path.\nIf you do not respond, we will trigger an SOS dispatch.",
+                widget.dangerReason ?? "You strayed from your requested path.\nIf you do not respond, we will trigger an SOS dispatch.",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(color: Colors.white70, fontSize: 16)),
             const SizedBox(height: 50),
