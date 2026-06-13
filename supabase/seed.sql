@@ -1,0 +1,11 @@
+-- supabase/seed.sql
+-- Run automatically by: supabase db reset
+--
+-- Incident data is seeded via the Python pipeline:
+--   cd backend-ai && python data/seed_all.py
+--
+-- That script inserts synthetic incidents from hyderabad_crimes.csv,
+-- then calls zone_generator.py (DBSCAN) to populate dynamic_zones.
+--
+-- Heatmap zones are inserted once manually — see the Supabase dashboard
+-- or run the INSERT statements in the project README.

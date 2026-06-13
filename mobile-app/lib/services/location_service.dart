@@ -159,7 +159,11 @@ class LocationService {
   void _writeBeacon(
       double lat, double lng, double heading, double speed, double accuracy) {
     final String? userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return;
+    if (userId == null) {
+      print('[LocationService] _writeBeacon: skipping — user not authenticated');
+      return;
+    }
+    print('[LocationService] writing beacon: user=$userId lat=$lat lng=$lng');
     _supabase.from('live_locations').upsert(
       {
         'user_id':        userId,
@@ -169,12 +173,14 @@ class LocationService {
         'speed':          speed,
         'accuracy':       accuracy,
         'updated_at':     DateTime.now().toUtc().toIso8601String(),
-        'source_type':    'gps',
+        'source_type':    'online',
         'mesh_hop_count': 0,
       },
       onConflict: 'user_id',
-    ).catchError((Object e) {
-      // Non-fatal — the dashboard keeps the last persisted position.
+    ).then((_) {
+      print('[LocationService] beacon upsert OK');
+    }).catchError((Object e) {
+      print('[LocationService] ❌ beacon upsert FAILED: $e');
     });
   }
 

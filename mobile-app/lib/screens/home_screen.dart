@@ -79,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isPendingRoute = false;
   String _pendingDestName = '';
   Map<String, dynamic>? _pendingRouteData; // cached route result shown during preview
+  bool _isRouteFetching = false; // guard: prevent concurrent _fetchAndDrawRoute calls
 
   // State Variables
   bool _isRouteActive = false;
@@ -656,10 +657,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _fetchAndDrawRoute(double endLat, double endLng, {bool isPreview = false}) async {
+    if (_isRouteFetching) {
+      print('[Route] Skipping — fetch already in progress');
+      return;
+    }
+    setState(() => _isRouteFetching = true);
+
     print('[Route] Origin: $_startLat, $_startLng');
     print('[Route] Destination: $endLat, $endLng');
 
-    if (!mounted) return;
+    try {
+    if (!mounted) return;  // finally still runs — _isRouteFetching cleared
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("Calculating safest path..."),
@@ -779,6 +787,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           content: Text("Unable to calculate route. Please try a different destination."),
         ),
       );
+    }
+    } finally {
+      if (mounted) setState(() => _isRouteFetching = false);
     }
   }
 
@@ -1389,7 +1400,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: SizedBox(
                     height: 40,
                     child: ElevatedButton(
-                      onPressed: () async {
+                      onPressed: _isRouteFetching ? null : () async {
                         print('=== START JOURNEY TAPPED ===');
                         final supabase = Supabase.instance.client;
                         print('User ID: ${supabase.auth.currentUser?.id}');
@@ -1443,9 +1454,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         elevation: 0,
                         padding: EdgeInsets.zero,
                       ),
-                      child: Text("Start Journey",
-                          style: GoogleFonts.inter(
-                              fontSize: 13, fontWeight: FontWeight.w700)),
+                      child: _isRouteFetching
+                          ? const SizedBox(
+                              width: 16, height: 16,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : Text("Start Journey",
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ),
