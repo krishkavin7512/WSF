@@ -212,6 +212,7 @@ export const DashboardPage: React.FC = () => {
     supabase
       .from('heatmap_zones')
       .select('*')
+      .eq('city', 'hyderabad')
       .then(({ data, error }) => {
         if (error) console.error('heatmap fetch error:', error.message);
         setHeatmapZones((data as HeatmapZone[]) ?? []);

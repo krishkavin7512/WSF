@@ -18,6 +18,7 @@ import 'package:mobile_app/services/audio_sentinel_service.dart';
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart'
     as bg;
 import 'package:mobile_app/services/geofence_service.dart';
+import 'package:mobile_app/services/location_service.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -52,11 +53,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Timer? _debounce;
 
   // Coordinates
-  double _startLat =
-      17.3422; // Default: Lords Institute of Engineering & Technology, Hyderabad
+  // _cameraLat/_cameraLng are ONLY used for the initial MapWidget cameraOptions.
+  // They are intentionally never updated so that setState calls from location
+  // updates do not cause MapWidget to reapply cameraOptions and jump the camera.
+  static const double _cameraLat = 17.3422;
+  static const double _cameraLng = 78.3663;
+
+  double _startLat = 17.3422; // Lords default — updated by real GPS
   double _startLng = 78.3663;
   double? _destLat;
   double? _destLng;
+
+  // Set true once the camera has auto-centered on the first valid GPS fix, so
+  // we center exactly once and never fight the user panning the map afterwards.
+  bool _hasCenteredOnUser = false;
 
   // Search Box API state
   List<Map<String, dynamic>> _suggestions = [];
@@ -242,15 +252,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     };
 
-    geofenceService.onLocationUpdate = (lat, lng) {
-      if (mounted) {
-        setState(() {
-          _startLat = lat;
-          _startLng = lng;
-        });
+    // LocationService is the SINGLE filtered source of position. It is the only
+    // code path allowed to set _startLat/_startLng from GPS. Fixes arriving here
+    // have already passed the accuracy (≤100 m) and jump (≤50 km) gates.
+    LocationService().onLocationUpdate = (lat, lng, heading, speed) {
+      if (!mounted) return;
+      final bool isFirstFix = !_hasCenteredOnUser;
+      setState(() {
+        _startLat = lat;
+        _startLng = lng;
+      });
+      // Center the camera exactly once, on the first valid fix.
+      if (isFirstFix) {
+        _hasCenteredOnUser = true;
+        mapboxMap?.flyTo(
+          CameraOptions(
+            center: Point(coordinates: Position(lng, lat)),
+            zoom: 15.0,
+          ),
+          MapAnimationOptions(duration: 1000),
+        );
       }
     };
 
+    // Order matters: LocationService.initialize() calls ready()/start() on the
+    // plugin, which must happen before GeofenceService adds geofences.
+    await LocationService().initialize();
     await geofenceService.initialize();
     _loadSafeHavens();
   }
@@ -857,22 +884,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _startLng >= 80.0 && _startLng <= 80.4) {
       city = 'chennai';
     }
+    print('Current location: $_startLat, $_startLng');
+    print('Detected city: $city');
     final zones = await _apiService.getHeatmapZones(
       city: city,
       hour: DateTime.now().hour,
+      showAll: true,
     );
     setState(() => _heatmapZones = zones);
     await _renderHeatmap();
   }
 
   Future<void> _renderHeatmap() async {
-    if (_heatmapManager == null) return;
+    print('CircleAnnotationManager (polygon): $_heatmapManager');
+    print('Rendering ${_heatmapZones.length} heatmap zones');
+    if (_heatmapManager == null) {
+      print('ERROR: _heatmapManager is null — skipping render');
+      return;
+    }
     await _heatmapManager!.deleteAll();
     final List<PolygonAnnotationOptions> options = [];
     for (final zone in _heatmapZones) {
-      final double lat = (zone['latitude'] as num).toDouble();
-      final double lng = (zone['longitude'] as num).toDouble();
+      // Backend may return center_lat/center_lng OR latitude/longitude depending
+      // on how the heatmap_zones table columns are named.
+      final double lat = ((zone['latitude'] ?? zone['center_lat']) as num).toDouble();
+      final double lng = ((zone['longitude'] ?? zone['center_lng']) as num).toDouble();
       final double radiusM = (zone['radius_m'] as num).toDouble();
+      print('  zone: lat=$lat lng=$lng radius=${radiusM}m level=${zone['risk_level']}');
       final String level = zone['risk_level'] as String? ?? 'medium';
       final int fillColor = level == 'high'
           ? Colors.red.withValues(alpha: 0.25).toARGB32()
@@ -933,7 +971,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             MapWidget(
               key: const ValueKey("mapWidget"),
               cameraOptions: CameraOptions(
-                center: Point(coordinates: Position(_startLng, _startLat)),
+                center: Point(coordinates: Position(_cameraLng, _cameraLat)),
                 zoom: 15.0,
               ),
               styleUri: _isNightMode
@@ -1942,7 +1980,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   height: 48,
                   child: ElevatedButton(
                     onPressed: () async {
-                      await GeofenceService().clearLocation();
+                      await LocationService().clearLocation();
+                      await LocationService().dispose();
                       await Supabase.instance.client.auth.signOut();
                       if (ctx.mounted) Navigator.of(ctx).pop();
                     },

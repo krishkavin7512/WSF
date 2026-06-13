@@ -28,6 +28,10 @@ DATA_DIR = os.path.dirname(__file__)
 crimes_path = os.path.join(DATA_DIR, "hyderabad_crimes.csv")
 
 # --- Step 1: Insert incidents ---
+print("Clearing existing synthetic incidents ...")
+supabase.table("incidents").delete().eq("source", "synthetic").execute()
+print("Existing synthetic incidents deleted.")
+
 print("Reading hyderabad_crimes.csv ...")
 df = pd.read_csv(crimes_path)
 
