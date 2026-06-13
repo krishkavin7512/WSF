@@ -48,8 +48,8 @@ def generate_dynamic_zones():
     # Haversine distance requires coordinates in radians
     pts_rad = np.radians(points)
 
-    # 50 meters epsilon, converted to radians based on Earth's radius in meters
-    eps_rad = 50.0 / 6371000.0
+    # 150 meters epsilon — wider radius catches sparser incident clusters
+    eps_rad = 150.0 / 6371000.0
 
     db = DBSCAN(eps=eps_rad, min_samples=3, metric='haversine')
     labels = db.fit_predict(pts_rad)
@@ -78,12 +78,20 @@ def generate_dynamic_zones():
         buffered_hull = hull.buffer(buffer_degrees)
 
         if buffered_hull.geom_type in ['Polygon', 'MultiPolygon']:
-            import json
             from shapely.geometry import mapping
-            geojson = json.dumps(mapping(buffered_hull))
+
+            # Risk level based on how many incidents formed this cluster
+            cluster_size = len(cluster_pts)
+            if cluster_size >= 6:
+                risk_level = "red"
+            else:
+                risk_level = "yellow"
+
+            # Pass dict directly — NOT json.dumps — so Supabase stores proper
+            # JSONB object instead of a double-encoded JSONB string
             insert_payload.append({
-                "risk_level": "red",
-                "boundary": geojson,
+                "risk_level": risk_level,
+                "boundary": mapping(buffered_hull),
             })
 
     # Clear old generated zones (delete all, then reinsert)

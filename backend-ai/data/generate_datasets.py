@@ -17,23 +17,34 @@ OUT = os.path.dirname(__file__)
 # ---------------------------------------------------------------------------
 
 AREAS = [
-    # (name, lat, lng, count, risk_label)
-    ("Old City/Charminar",    17.3616, 78.4747, 120, "high"),
-    ("Dilsukhnagar",          17.3688, 78.5247,  80, "high"),
-    ("Mehdipatnam",           17.3933, 78.4344,  70, "high"),
-    ("Secunderabad Station",  17.4399, 78.4983,  60, "medium"),
-    ("Koti",                  17.3850, 78.4867,  50, "medium"),
-    ("LB Nagar",              17.3494, 78.5521,  40, "medium"),
-    ("Ameerpet",              17.4374, 78.4487,  40, "medium"),
-    ("Jubilee Hills",         17.4290, 78.4072,  50, "medium"),
-    ("Himayat Sagar/Lords",   17.3422, 78.3663,  10, "low"),
-    ("Gachibowli",            17.4401, 78.3489,  10, "low"),
+    # (name, lat, lng, count, risk_label, scatter_sigma)
+    # scatter_sigma in degrees: ~0.003 = 333m (city areas), ~0.0008 = 89m (tight demo clusters)
+    ("Old City/Charminar",    17.3616, 78.4747, 120, "high",   0.003),
+    ("Dilsukhnagar",          17.3688, 78.5247,  80, "high",   0.003),
+    ("Mehdipatnam",           17.3933, 78.4344,  70, "high",   0.003),
+    ("Secunderabad Station",  17.4399, 78.4983,  60, "medium", 0.003),
+    ("Koti",                  17.3850, 78.4867,  50, "medium", 0.003),
+    ("LB Nagar",              17.3494, 78.5521,  40, "medium", 0.003),
+    ("Ameerpet",              17.4374, 78.4487,  40, "medium", 0.003),
+    ("Jubilee Hills",         17.4290, 78.4072,  50, "medium", 0.003),
+    ("Himayat Sagar/Lords",   17.3422, 78.3663,  10, "low",    0.003),
+    ("Gachibowli",            17.4401, 78.3489,  10, "low",    0.003),
     # New areas added for demo coverage
-    ("Falaknuma",             17.3318, 78.4812,  55, "high"),
-    ("Chandrayangutta",       17.3389, 78.5001,  45, "high"),
-    ("Santoshnagar",          17.3567, 78.5123,  30, "medium"),
-    ("Rajendra Nagar",        17.3234, 78.4456,  25, "medium"),
-    ("Himayat Sagar Fringe",  17.3350, 78.3750,  15, "medium"),
+    ("Falaknuma",             17.3318, 78.4812,  55, "high",   0.003),
+    ("Chandrayangutta",       17.3389, 78.5001,  45, "high",   0.003),
+    ("Santoshnagar",          17.3567, 78.5123,  30, "medium", 0.003),
+    ("Rajendra Nagar",        17.3234, 78.4456,  25, "medium", 0.003),
+    ("Himayat Sagar Fringe",  17.3350, 78.3750,  15, "medium", 0.003),
+    # Lords College demo clusters — tight sigma ensures DBSCAN picks up each zone
+    ("Lords Main Gate",           17.3422, 78.3663,  8, "high",   0.0008),
+    ("Lords ORR West Road",       17.3415, 78.3607,  7, "high",   0.0008),
+    ("Lords Himayat Sagar North", 17.3468, 78.3672,  6, "high",   0.0008),
+    ("Lords South Gate",          17.3381, 78.3658,  5, "medium", 0.0008),
+    ("Lords Isolated Bus Stop",   17.3392, 78.3718,  5, "medium", 0.0008),
+    ("Lords Service Road West",   17.3448, 78.3637,  4, "medium", 0.0008),
+    ("Lords ORR Ramp Junction",   17.3408, 78.3587,  4, "medium", 0.0008),
+    ("Lords Hostel Access Road",  17.3438, 78.3698,  4, "medium", 0.0008),
+    ("Lords South Stretch",       17.3358, 78.3692,  4, "medium", 0.0008),
 ]
 
 CRIME_TYPES = ["eve_teasing", "assault", "robbery", "harassment", "theft", "stalking"]
@@ -56,11 +67,10 @@ BASE_DATE = datetime(2023, 1, 1)
 DATE_RANGE_DAYS = 730  # 2 years
 
 rows = []
-for area_name, center_lat, center_lng, count, risk_label in AREAS:
+for area_name, center_lat, center_lng, count, risk_label, sigma in AREAS:
     for _ in range(count):
-        # Gaussian scatter ~300m radius (0.003 degrees ≈ 333m)
-        lat = rng.normal(center_lat, 0.003)
-        lng = rng.normal(center_lng, 0.003)
+        lat = rng.normal(center_lat, sigma)
+        lng = rng.normal(center_lng, sigma)
         crime_type = rng.choice(CRIME_TYPES)
         severity_word = rng.choice(AREA_SEVERITY[risk_label])
         severity = SEVERITY_MAP[severity_word]

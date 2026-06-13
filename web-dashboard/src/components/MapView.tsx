@@ -19,6 +19,12 @@ export interface HeatmapZone {
   active_hours?: string;
 }
 
+export interface DynamicZone {
+  id: string;
+  risk_level: string;
+  boundary: string | object;
+}
+
 interface MapViewProps {
   incidents?: Incident[];
   locations?: LiveLocation[];
@@ -32,6 +38,7 @@ interface MapViewProps {
   mapStyle?: string;
   showPatrolRoutes?: boolean;
   flyToLocation?: { lat: number; lng: number } | null;
+  dynamicZones?: DynamicZone[];
 }
 
 // Helper: Check if point is inside a circle (for zone detection)
@@ -61,10 +68,12 @@ const MapView: React.FC<MapViewProps> = ({
   heatmapZones = [],
   mapStyle = 'mapbox://styles/mapbox/dark-v11',
   showPatrolRoutes = false,
-  flyToLocation = null
+  flyToLocation = null,
+  dynamicZones = []
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const zoneCountRef = useRef(0);
   // State for popup
   const [popupInfo, setPopupInfo] = useState<{ x: number, y: number, user: any } | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -321,23 +330,37 @@ const MapView: React.FC<MapViewProps> = ({
     });
   }, [showPatrolRoutes, mapLoaded]);
 
-  // Heatmap layer
+  // Heatmap layer — rendered as polygon fills matching dynamic zone style
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
 
     const removeHeatmap = () => {
-      if (map.current?.getLayer('heatmap-layer')) map.current.removeLayer('heatmap-layer');
+      if (map.current?.getLayer('heatmap-fill')) map.current.removeLayer('heatmap-fill');
+      if (map.current?.getLayer('heatmap-outline')) map.current.removeLayer('heatmap-outline');
       if (map.current?.getSource('heatmap-source')) map.current.removeSource('heatmap-source');
     };
 
     removeHeatmap();
     if (!showHeatmap || heatmapZones.length === 0) return;
 
-    const features = heatmapZones.map(z => ({
-      type: 'Feature' as const,
-      geometry: { type: 'Point' as const, coordinates: [z.longitude, z.latitude] },
-      properties: { area_name: z.area_name, risk_score: z.risk_score, risk_level: z.risk_level }
-    }));
+    // Convert each lat/lng/radius_m into a GeoJSON polygon (approximated circle)
+    const features: GeoJSON.Feature[] = heatmapZones.map(z => {
+      const radiusKm = (z.radius_m || 300) / 1000;
+      const points = 64;
+      const coords: number[][] = [];
+      for (let i = 0; i < points; i++) {
+        const angle = (i / points) * 2 * Math.PI;
+        const deltaLat = (radiusKm * Math.sin(angle)) / 111.32;
+        const deltaLng = (radiusKm * Math.cos(angle)) / (111.32 * Math.cos(z.latitude * Math.PI / 180));
+        coords.push([z.longitude + deltaLng, z.latitude + deltaLat]);
+      }
+      coords.push(coords[0]); // close ring
+      return {
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [coords] },
+        properties: { area_name: z.area_name, risk_score: z.risk_score, risk_level: z.risk_level }
+      };
+    });
 
     map.current.addSource('heatmap-source', {
       type: 'geojson',
@@ -345,19 +368,33 @@ const MapView: React.FC<MapViewProps> = ({
     });
 
     map.current.addLayer({
-      id: 'heatmap-layer',
-      type: 'circle',
+      id: 'heatmap-fill',
+      type: 'fill',
       source: 'heatmap-source',
       paint: {
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 20, 15, 60],
-        'circle-color': [
+        'fill-color': [
           'match', ['get', 'risk_level'],
           'high', '#EF4444',
           'medium', '#F97316',
           '#FBBF24'
         ],
-        'circle-opacity': 0.3,
-        'circle-blur': 0.8
+        'fill-opacity': 0.2
+      }
+    });
+
+    map.current.addLayer({
+      id: 'heatmap-outline',
+      type: 'line',
+      source: 'heatmap-source',
+      paint: {
+        'line-color': [
+          'match', ['get', 'risk_level'],
+          'high', '#EF4444',
+          'medium', '#F97316',
+          '#FBBF24'
+        ],
+        'line-width': 2,
+        'line-opacity': 0.85
       }
     });
 
@@ -376,32 +413,29 @@ const MapView: React.FC<MapViewProps> = ({
       document.querySelectorAll('.mapboxgl-popup').forEach(p => p.remove());
     };
 
-    map.current.on('mouseenter', 'heatmap-layer', onMouseEnter);
-    map.current.on('mouseleave', 'heatmap-layer', onMouseLeave);
+    map.current.on('mouseenter', 'heatmap-fill', onMouseEnter);
+    map.current.on('mouseleave', 'heatmap-fill', onMouseLeave);
 
     return () => {
-      map.current?.off('mouseenter', 'heatmap-layer', onMouseEnter);
-      map.current?.off('mouseleave', 'heatmap-layer', onMouseLeave);
+      map.current?.off('mouseenter', 'heatmap-fill', onMouseEnter);
+      map.current?.off('mouseleave', 'heatmap-fill', onMouseLeave);
       removeHeatmap();
     };
   }, [showHeatmap, heatmapZones, mapLoaded]);
 
-  // Render Zones as Circles (Existing logic, keep as is for now or refactor similarly if needed)
+  // Render static zones (from `zones` table) as approximated circles
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
-    // ... (keeping existing zone rendering logic for now to minimize risk, 
-    // but ideally should be single source too)
 
-    // Remove existing zone layers
-    zones.forEach((_, idx) => {
-      const circleId = `zone-circle-${idx}`;
-      const borderId = `zone-circle-border-${idx}`;
-      if (map.current!.getLayer(circleId)) map.current!.removeLayer(circleId);
-      if (map.current!.getLayer(borderId)) map.current!.removeLayer(borderId);
-      if (map.current!.getSource(circleId)) map.current!.removeSource(circleId);
-    });
+    // Bug fix: remove up to PREVIOUS count, not current count (prevents stale layer leak)
+    const prevCount = zoneCountRef.current;
+    for (let idx = 0; idx < prevCount; idx++) {
+      if (map.current.getLayer(`zone-circle-${idx}`)) map.current.removeLayer(`zone-circle-${idx}`);
+      if (map.current.getLayer(`zone-circle-border-${idx}`)) map.current.removeLayer(`zone-circle-border-${idx}`);
+      if (map.current.getSource(`zone-circle-${idx}`)) map.current.removeSource(`zone-circle-${idx}`);
+    }
+    zoneCountRef.current = zones.length;
 
-    // Add new zone circles
     zones.forEach((zone, idx) => {
       const color = zone.severity === 'HIGH' ? '#FF4D4D' : '#FFD700';
       const radiusInMeters = zone.radius || 200;
@@ -443,8 +477,72 @@ const MapView: React.FC<MapViewProps> = ({
         paint: { 'line-color': color, 'line-width': 2, 'line-opacity': 0.6 }
       });
     });
-
   }, [zones, mapLoaded]);
+
+  // Render dynamic_zones as actual GeoJSON polygons (Bug 1/2/3 fix)
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    console.log(`[MapView] Rendering ${dynamicZones.length} dynamic zones`);
+
+    if (map.current.getLayer('dynamic-zones-fill')) map.current.removeLayer('dynamic-zones-fill');
+    if (map.current.getLayer('dynamic-zones-outline')) map.current.removeLayer('dynamic-zones-outline');
+    if (map.current.getSource('dynamic-zones-source')) map.current.removeSource('dynamic-zones-source');
+
+    if (dynamicZones.length === 0) return;
+
+    const features: GeoJSON.Feature[] = [];
+    for (const z of dynamicZones) {
+      try {
+        const geom = typeof z.boundary === 'string' ? JSON.parse(z.boundary) : z.boundary;
+        features.push({
+          type: 'Feature',
+          geometry: geom as GeoJSON.Geometry,
+          properties: { risk_level: z.risk_level }
+        });
+      } catch (e) {
+        console.warn('[MapView] Failed to parse boundary for zone', z.id, e);
+      }
+    }
+
+    map.current.addSource('dynamic-zones-source', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features }
+    });
+
+    map.current.addLayer({
+      id: 'dynamic-zones-fill',
+      type: 'fill',
+      source: 'dynamic-zones-source',
+      paint: {
+        'fill-color': [
+          'match', ['get', 'risk_level'],
+          'red', '#EF4444',
+          'yellow', '#F59E0B',
+          '#EF4444'
+        ],
+        'fill-opacity': 0.25
+      }
+    });
+
+    map.current.addLayer({
+      id: 'dynamic-zones-outline',
+      type: 'line',
+      source: 'dynamic-zones-source',
+      paint: {
+        'line-color': [
+          'match', ['get', 'risk_level'],
+          'red', '#EF4444',
+          'yellow', '#F59E0B',
+          '#EF4444'
+        ],
+        'line-width': 2,
+        'line-opacity': 0.85
+      }
+    });
+
+    console.log(`[MapView] ✓ Dynamic zones rendered (${features.length} polygons)`);
+  }, [dynamicZones, mapLoaded]);
 
   return (
     <>
