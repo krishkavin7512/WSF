@@ -56,3 +56,16 @@ a {
 .scroll-area {
   overflow: auto;
 }
+
+@keyframes sentra-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.4); }
+}
+
+.sentra-threat-dot {
+  display: inline-block;
+  background: #FF3B30;
+  border-radius: 50%;
+  animation: sentra-pulse 1s ease-in-out infinite;
+  flex-shrink: 0;
+}

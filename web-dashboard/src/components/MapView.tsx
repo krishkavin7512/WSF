@@ -25,6 +25,8 @@ export interface DynamicZone {
   boundary: string | object;
 }
 
+const EMPTY_USER_THREAT_SET = new Set<string>();
+
 interface MapViewProps {
   incidents?: Incident[];
   locations?: LiveLocation[];
@@ -39,6 +41,7 @@ interface MapViewProps {
   showPatrolRoutes?: boolean;
   flyToLocation?: { lat: number; lng: number } | null;
   dynamicZones?: DynamicZone[];
+  usersWithAudioThreat?: Set<string>;
 }
 
 // Helper: Check if point is inside a circle (for zone detection)
@@ -69,7 +72,8 @@ const MapView: React.FC<MapViewProps> = ({
   mapStyle = 'mapbox://styles/mapbox/dark-v11',
   showPatrolRoutes = false,
   flyToLocation = null,
-  dynamicZones = []
+  dynamicZones = [],
+  usersWithAudioThreat = EMPTY_USER_THREAT_SET,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -129,14 +133,36 @@ const MapView: React.FC<MapViewProps> = ({
         data: { type: 'FeatureCollection', features: [] }
       });
 
-      // User Beacon Circle (Inner Blue)
+      // Audio threat sonar ripple rings — rendered behind the dot, animated via setPaintProperty
+      ['audio-ripple-1', 'audio-ripple-2', 'audio-ripple-3'].forEach(id => {
+        map.current?.addLayer({
+          id,
+          type: 'circle',
+          source: 'users-source',
+          filter: ['==', ['get', 'hasAudioThreat'], true],
+          paint: {
+            'circle-radius': 6,
+            'circle-color': 'transparent',
+            'circle-stroke-color': '#FF3B30',
+            'circle-stroke-width': 2,
+            'circle-stroke-opacity': 0,
+          }
+        });
+      });
+
+      // User Beacon Circle — red when audio threat active, blue otherwise
       map.current?.addLayer({
         id: 'users-layer',
         type: 'circle',
         source: 'users-source',
         paint: {
-          'circle-radius': 5, // Smaller beacon
-          'circle-color': '#3B82F6',
+          'circle-radius': 5,
+          'circle-color': [
+            'case',
+            ['boolean', ['get', 'hasAudioThreat'], false],
+            '#FF3B30',
+            '#3B82F6'
+          ],
           'circle-opacity': 1
         }
       });
@@ -262,7 +288,8 @@ const MapView: React.FC<MapViewProps> = ({
         properties: {
           userId: loc.user_id,
           inRedZone,
-          inYellowZone
+          inYellowZone,
+          hasAudioThreat: usersWithAudioThreat.has(loc.user_id),
         }
       };
     });
@@ -274,7 +301,7 @@ const MapView: React.FC<MapViewProps> = ({
 
     console.log(`✓ Updated ${locations.length} beacons via single source`);
 
-  }, [locations, mapLoaded, zones]);
+  }, [locations, mapLoaded, zones, usersWithAudioThreat]);
 
   // Pulsing animation timer
   useEffect(() => {
@@ -306,6 +333,16 @@ const MapView: React.FC<MapViewProps> = ({
       map.current.setPaintProperty('users-pulse-yellow', 'circle-radius', pulseRadius - 2);
       map.current.setPaintProperty('users-pulse-yellow', 'circle-stroke-opacity', pulseOpacity * 0.8);
     }
+
+    // Audio threat sonar rings — 3 rings staggered 1/3 cycle apart, expanding outward
+    ['audio-ripple-1', 'audio-ripple-2', 'audio-ripple-3'].forEach((layerId, i) => {
+      if (!map.current?.getLayer(layerId)) return;
+      const phase = ((pulsePhase + i * 20) % 60) / 60; // 0..1, each ring offset by 1/3
+      const ringRadius = 6 + phase * 26;               // 6 → 32 px (sonar expansion)
+      const ringOpacity = (1 - phase) * 0.85;          // 0.85 → 0 (fade as it expands)
+      map.current.setPaintProperty(layerId, 'circle-radius', ringRadius);
+      map.current.setPaintProperty(layerId, 'circle-stroke-opacity', ringOpacity);
+    });
   }, [pulsePhase, mapLoaded]);
 
   // Fly to location when sidebar user is clicked
