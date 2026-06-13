@@ -79,6 +79,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isPendingRoute = false;
   String _pendingDestName = '';
   Map<String, dynamic>? _pendingRouteData; // cached route result shown during preview
+  bool _isRouteFetching = false; // guard: prevent concurrent _fetchAndDrawRoute calls
+  DateTime? _lastAudioIncidentAt;   // cooldown: one incident per 30 s maximum
+  String?   _activeAudioIncidentId; // id of the open audio incident (cleared on resolve)
+  bool      _audioAlertShowing = false; // guard: prevent stacked overlays
 
   // State Variables
   bool _isRouteActive = false;
@@ -173,14 +177,85 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _initAudioSentinel() async {
     await _audioSentinel.initialize();
-    _audioSentinel.onDangerDetected = (event, confidence) {
-      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
-        _showDriftOverlay(
-            dangerReason: "Danger incoming...\n${event.toUpperCase()} detected.\nIf you do not respond, we will trigger an SOS dispatch.");
+    _audioSentinel.onDangerDetected = (event, confidence) async {
+      print('=== AUDIO DANGER DETECTED ===');
+      print('Label: $event');
+      print('Confidence: $confidence');
+
+      // Write incident to Supabase — once per 30 s max (sustained sounds re-trigger).
+      final now = DateTime.now();
+      final bool cooledDown = _lastAudioIncidentAt == null ||
+          now.difference(_lastAudioIncidentAt!) > const Duration(seconds: 30);
+
+      final supabase = Supabase.instance.client;
+      final userId = supabase.auth.currentUser?.id;
+
+      if (cooledDown && userId != null) {
+        _lastAudioIncidentAt = now;
+        print('[AudioSentinel] Writing incident to Supabase...');
+        try {
+          final insertResult = await supabase.from('incidents').insert({
+            'user_id':      userId,
+            'source':       'audio',
+            'severity':     3,
+            'status':       'open',
+            'latitude':     _startLat,
+            'longitude':    _startLng,
+            'notes':        'Audio threat detected: $event (${(confidence * 100).toStringAsFixed(0)}% confidence)',
+            'display_name': supabase.auth.currentUser?.userMetadata?['full_name'] ?? 'SENTRA user',
+          }).select('id').single();
+          _activeAudioIncidentId = insertResult['id'] as String?;
+          print('[AudioSentinel] Incident written OK (id: $_activeAudioIncidentId)');
+        } catch (e) {
+          print('[AudioSentinel] ❌ Incident write FAILED: $e');
+        }
+        // Show overlay only after a confirmed insert, and never stack them.
+        if (mounted && ModalRoute.of(context)?.isCurrent == true && !_audioAlertShowing) {
+          _showAudioAlert(event, confidence);
+        }
+      } else if (userId == null) {
+        print('[AudioSentinel] ⚠️ No authenticated user — incident not written');
+      } else {
+        print('[AudioSentinel] Cooldown active — skipping duplicate');
       }
     };
     _audioSentinel.startListening();
     setState(() {});
+  }
+
+  void _showAudioAlert(String label, double confidence) async {
+    _audioAlertShowing = true;
+    final bool isSafe = await showGeneralDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          barrierColor: const Color(0xF0CC0000),
+          transitionDuration: const Duration(milliseconds: 300),
+          pageBuilder: (ctx, anim1, anim2) =>
+              AudioThreatOverlay(label: label, confidence: confidence),
+        ) ??
+        false;
+    _audioAlertShowing = false;
+
+    if (isSafe) {
+      // User confirmed they're safe — resolve the incident so dashboard clears it.
+      final incidentId = _activeAudioIncidentId;
+      if (incidentId != null) {
+        try {
+          await Supabase.instance.client.from('incidents').update({
+            'status':      'resolved',
+            'resolved_at': DateTime.now().toUtc().toIso8601String(),
+          }).eq('id', incidentId);
+          print('[AudioSentinel] Incident $incidentId resolved');
+        } catch (e) {
+          print('[AudioSentinel] ❌ Resolve failed: $e');
+        }
+        if (mounted) setState(() => _activeAudioIncidentId = null);
+      }
+    } else {
+      _handleSosSequence(
+        triggerReason: 'Audio threat detected: ${label.toUpperCase()}',
+      );
+    }
   }
 
   void _initVolumeDownOverride() {
@@ -656,10 +731,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _fetchAndDrawRoute(double endLat, double endLng, {bool isPreview = false}) async {
+    if (_isRouteFetching) {
+      print('[Route] Skipping — fetch already in progress');
+      return;
+    }
+    setState(() => _isRouteFetching = true);
+
     print('[Route] Origin: $_startLat, $_startLng');
     print('[Route] Destination: $endLat, $endLng');
 
-    if (!mounted) return;
+    try {
+    if (!mounted) return;  // finally still runs — _isRouteFetching cleared
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("Calculating safest path..."),
@@ -779,6 +861,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           content: Text("Unable to calculate route. Please try a different destination."),
         ),
       );
+    }
+    } finally {
+      if (mounted) setState(() => _isRouteFetching = false);
     }
   }
 
@@ -1389,7 +1474,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: SizedBox(
                     height: 40,
                     child: ElevatedButton(
-                      onPressed: () async {
+                      onPressed: _isRouteFetching ? null : () async {
                         print('=== START JOURNEY TAPPED ===');
                         final supabase = Supabase.instance.client;
                         print('User ID: ${supabase.auth.currentUser?.id}');
@@ -1443,9 +1528,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         elevation: 0,
                         padding: EdgeInsets.zero,
                       ),
-                      child: Text("Start Journey",
-                          style: GoogleFonts.inter(
-                              fontSize: 13, fontWeight: FontWeight.w700)),
+                      child: _isRouteFetching
+                          ? const SizedBox(
+                              width: 16, height: 16,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : Text("Start Journey",
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, fontWeight: FontWeight.w700)),
                     ),
                   ),
                 ),
@@ -2459,5 +2549,174 @@ class _DriftSosOverlayState extends State<DriftSosOverlay> {
             ),
           ]),
         )));
+  }
+}
+
+// ── Audio Threat Overlay ──────────────────────────────────────────────────────
+// Shown when YAMNet detects a danger sound. Has a 15-second countdown;
+// auto-triggers SOS if the user doesn't respond. Red background distinguishes
+// it clearly from the route-drift overlay (black background).
+
+class AudioThreatOverlay extends StatefulWidget {
+  final String label;
+  final double confidence;
+  const AudioThreatOverlay({
+    super.key,
+    required this.label,
+    required this.confidence,
+  });
+
+  @override
+  State<AudioThreatOverlay> createState() => _AudioThreatOverlayState();
+}
+
+class _AudioThreatOverlayState extends State<AudioThreatOverlay> {
+  int _countdown = 15;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _triggerHaptics();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _triggerHaptics();
+      if (!mounted) return;
+      setState(() {
+        if (_countdown > 1) {
+          _countdown--;
+        } else {
+          _timer?.cancel();
+          // Time's up → return false so caller triggers SOS
+          Navigator.of(context).pop(false);
+        }
+      });
+    });
+  }
+
+  void _triggerHaptics() {
+    HapticFeedback.heavyImpact();
+    Future.delayed(const Duration(milliseconds: 200), () {
+      HapticFeedback.heavyImpact();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.mic_off_rounded,
+                  color: Colors.white, size: 64),
+              const SizedBox(height: 16),
+              Text(
+                'THREAT DETECTED',
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                widget.label.toUpperCase(),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '${(widget.confidence * 100).toStringAsFixed(0)}% confidence',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'An alert has been sent to the command centre.\nRespond or SOS will be triggered automatically.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 40),
+              Text(
+                '$_countdown',
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 88,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 40),
+              // I'M SAFE — dismisses without SOS
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    _timer?.cancel();
+                    Navigator.of(context).pop(true);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFFCC0000),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: const StadiumBorder(),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    "I'M SAFE",
+                    style: GoogleFonts.inter(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // SEND SOS — immediately triggers SOS
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    _timer?.cancel();
+                    Navigator.of(context).pop(false);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white54, width: 1.5),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: const StadiumBorder(),
+                  ),
+                  child: Text(
+                    'SEND SOS',
+                    style: GoogleFonts.inter(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

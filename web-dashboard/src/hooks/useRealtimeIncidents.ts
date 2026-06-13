@@ -45,11 +45,21 @@ const mockIncidents: Incident[] = [
   },
 ];
 
+// DB stores severity as integer (1=low, 2=medium, 3=high).
+// TypeScript/dashboard expects the string form. Convert either way.
+const normalizeSeverity = (val: any): 'low' | 'medium' | 'high' => {
+  if (val === 'high' || val === 'medium' || val === 'low') return val;
+  if (val === 3 || val === '3') return 'high';
+  if (val === 2 || val === '2') return 'medium';
+  if (val === 1 || val === '1') return 'low';
+  return 'medium';
+};
+
 const normalizeIncident = (row: any): Incident => ({
   id: row.id?.toString() ?? crypto.randomUUID(),
   user_id: row.user_id ?? undefined,
   status: row.status ?? "open",
-  severity: row.severity ?? "medium",
+  severity: normalizeSeverity(row.severity),
   latitude: Number(row.latitude ?? row.lat ?? 0),
   longitude: Number(row.longitude ?? row.lng ?? 0),
   created_at: row.created_at ?? new Date().toISOString(),
