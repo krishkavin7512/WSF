@@ -15,8 +15,10 @@ dependencies:
   record: ^5.2.0
 
   # Maps & Location
+  # Single location source: flutter_background_geolocation (see LocationService).
+  # geolocator was removed — it was declared but never called from Dart, and a
+  # second location plugin is a latent dual-source conflict.
   mapbox_maps_flutter: 2.17.0
-  geolocator: ^10.1.0
   permission_handler: ^11.3.0
   flutter_background_geolocation: ^4.15.2
   
