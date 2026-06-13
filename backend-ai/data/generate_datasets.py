@@ -25,9 +25,15 @@ AREAS = [
     ("Koti",                  17.3850, 78.4867,  50, "medium"),
     ("LB Nagar",              17.3494, 78.5521,  40, "medium"),
     ("Ameerpet",              17.4374, 78.4487,  40, "medium"),
-    ("Jubilee Hills",         17.4290, 78.4072,  30, "low_medium"),
+    ("Jubilee Hills",         17.4290, 78.4072,  50, "medium"),
     ("Himayat Sagar/Lords",   17.3422, 78.3663,  10, "low"),
     ("Gachibowli",            17.4401, 78.3489,  10, "low"),
+    # New areas added for demo coverage
+    ("Falaknuma",             17.3318, 78.4812,  55, "high"),
+    ("Chandrayangutta",       17.3389, 78.5001,  45, "high"),
+    ("Santoshnagar",          17.3567, 78.5123,  30, "medium"),
+    ("Rajendra Nagar",        17.3234, 78.4456,  25, "medium"),
+    ("Himayat Sagar Fringe",  17.3350, 78.3750,  15, "medium"),
 ]
 
 CRIME_TYPES = ["eve_teasing", "assault", "robbery", "harassment", "theft", "stalking"]

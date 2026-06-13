@@ -76,10 +76,15 @@ def get_danger_zones(simulated_hour: Optional[int] = None):
         raise HTTPException(status_code=500, detail=f"Failed to fetch zones: {exc}")
 
 @app.get("/heatmap")
-def get_heatmap(city: Optional[str] = None, hour: Optional[int] = None):
+def get_heatmap(
+    city: Optional[str] = None,
+    hour: Optional[int] = None,
+    show_all: bool = False,
+):
     """
     Returns heatmap zones from Supabase filtered by city and active hours.
     active_hours='all' → always; 'night' → hour>=20 or hour<7; 'day' → 7<=hour<20
+    show_all=true overrides time filtering (demo mode).
     """
     current_hour = hour if hour is not None else datetime.now().hour
     try:
@@ -90,6 +95,8 @@ def get_heatmap(city: Optional[str] = None, hour: Optional[int] = None):
         zones = result.data or []
 
         def is_active(zone: Dict[str, Any]) -> bool:
+            if show_all:
+                return True
             h = zone.get("active_hours", "all")
             if h == "all":
                 return True
