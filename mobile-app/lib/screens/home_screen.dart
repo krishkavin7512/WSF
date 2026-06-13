@@ -225,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           final insertResult = await supabase.from('incidents').insert({
             'user_id':      userId,
             'source':       'audio',
-            'severity':     3,
+            'severity':     'high',
             'status':       'open',
             'latitude':     _startLat,
             'longitude':    _startLng,
