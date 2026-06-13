@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'services/geofence_service.dart';
 import 'theme/sentra_design.dart';
 
 Future<void> main() async {
@@ -58,6 +59,10 @@ class _AuthShellState extends State<AuthShell> {
     _session = Supabase.instance.client.auth.currentSession;
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       if (!mounted) return;
+      // Session just ended (logout or expiry) — remove beacon from dashboard
+      if (data.session == null && _session != null) {
+        GeofenceService().clearLocation();
+      }
       setState(() => _session = data.session);
     });
   }

@@ -7,6 +7,18 @@ import { REAL_USER_PROFILES, PATROL_ROUTES } from '../data/velloreRealData';
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || '';
 
+export interface HeatmapZone {
+  id: string;
+  area_name: string;
+  latitude: number;
+  longitude: number;
+  radius_m: number;
+  risk_level: 'high' | 'medium' | 'low';
+  risk_score: number;
+  city?: string;
+  active_hours?: string;
+}
+
 interface MapViewProps {
   incidents?: Incident[];
   locations?: LiveLocation[];
@@ -16,8 +28,10 @@ interface MapViewProps {
   loading?: boolean;
   supabaseEnabled?: boolean;
   showHeatmap?: boolean;
+  heatmapZones?: HeatmapZone[];
   mapStyle?: string;
   showPatrolRoutes?: boolean;
+  flyToLocation?: { lat: number; lng: number } | null;
 }
 
 // Helper: Check if point is inside a circle (for zone detection)
@@ -44,8 +58,10 @@ const MapView: React.FC<MapViewProps> = ({
   loading = false,
   supabaseEnabled = false,
   showHeatmap = false,
+  heatmapZones = [],
   mapStyle = 'mapbox://styles/mapbox/dark-v11',
-  showPatrolRoutes = false
+  showPatrolRoutes = false,
+  flyToLocation = null
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -61,8 +77,8 @@ const MapView: React.FC<MapViewProps> = ({
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: mapStyle,
-      center: [79.1559, 12.9692], // VIT Vellore
-      zoom: 13.5,
+      center: [78.3663, 17.3422], // Lords Institute of Engineering & Technology, Hyderabad
+      zoom: 15,
       pitch: 0,
       attributionControl: false,
       renderWorldCopies: false // Prevent coordinate confusion
@@ -266,8 +282,9 @@ const MapView: React.FC<MapViewProps> = ({
 
     // Calculate pulse values (oscillate radius and opacity)
     const t = pulsePhase / 60;
-    const pulseRadius = 8 + Math.sin(t * Math.PI * 2) * 4; // 8-12 range (smaller)
-    const pulseOpacity = 0.3 + Math.sin(t * Math.PI * 2) * 0.4; // 0.3-0.7 range
+    const pulseRadius = 8 + Math.sin(t * Math.PI * 2) * 4; // 8-12 range
+    const sinVal = (1 + Math.sin(t * Math.PI * 2)) / 2; // 0-1, never negative
+    const pulseOpacity = 0.3 + sinVal * 0.4; // 0.3-0.7 range
 
     // Update red pulse layer
     if (map.current.getLayer('users-pulse-red')) {
@@ -282,6 +299,16 @@ const MapView: React.FC<MapViewProps> = ({
     }
   }, [pulsePhase, mapLoaded]);
 
+  // Fly to location when sidebar user is clicked
+  useEffect(() => {
+    if (!map.current || !mapLoaded || !flyToLocation) return;
+    map.current.flyTo({
+      center: [flyToLocation.lng, flyToLocation.lat],
+      zoom: 17,
+      duration: 1200
+    });
+  }, [flyToLocation, mapLoaded]);
+
   // Toggle patrol routes visibility based on prop
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
@@ -293,6 +320,71 @@ const MapView: React.FC<MapViewProps> = ({
       }
     });
   }, [showPatrolRoutes, mapLoaded]);
+
+  // Heatmap layer
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+
+    const removeHeatmap = () => {
+      if (map.current?.getLayer('heatmap-layer')) map.current.removeLayer('heatmap-layer');
+      if (map.current?.getSource('heatmap-source')) map.current.removeSource('heatmap-source');
+    };
+
+    removeHeatmap();
+    if (!showHeatmap || heatmapZones.length === 0) return;
+
+    const features = heatmapZones.map(z => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [z.longitude, z.latitude] },
+      properties: { area_name: z.area_name, risk_score: z.risk_score, risk_level: z.risk_level }
+    }));
+
+    map.current.addSource('heatmap-source', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features }
+    });
+
+    map.current.addLayer({
+      id: 'heatmap-layer',
+      type: 'circle',
+      source: 'heatmap-source',
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 20, 15, 60],
+        'circle-color': [
+          'match', ['get', 'risk_level'],
+          'high', '#EF4444',
+          'medium', '#F97316',
+          '#FBBF24'
+        ],
+        'circle-opacity': 0.3,
+        'circle-blur': 0.8
+      }
+    });
+
+    // Hover tooltip
+    const onMouseEnter = (e: mapboxgl.MapLayerMouseEvent) => {
+      map.current!.getCanvas().style.cursor = 'pointer';
+      const props = e.features?.[0]?.properties;
+      if (!props) return;
+      new mapboxgl.Popup({ closeButton: false, closeOnClick: false })
+        .setLngLat(e.lngLat)
+        .setHTML(`<strong>${props.area_name}</strong><br/>Risk Score: ${props.risk_score}`)
+        .addTo(map.current!);
+    };
+    const onMouseLeave = () => {
+      map.current!.getCanvas().style.cursor = '';
+      document.querySelectorAll('.mapboxgl-popup').forEach(p => p.remove());
+    };
+
+    map.current.on('mouseenter', 'heatmap-layer', onMouseEnter);
+    map.current.on('mouseleave', 'heatmap-layer', onMouseLeave);
+
+    return () => {
+      map.current?.off('mouseenter', 'heatmap-layer', onMouseEnter);
+      map.current?.off('mouseleave', 'heatmap-layer', onMouseLeave);
+      removeHeatmap();
+    };
+  }, [showHeatmap, heatmapZones, mapLoaded]);
 
   // Render Zones as Circles (Existing logic, keep as is for now or refactor similarly if needed)
   useEffect(() => {

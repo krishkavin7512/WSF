@@ -1,0 +1,511 @@
+latitude,longitude,crime_type,severity,hour,date,area_name
+17.362514,78.47158,robbery,1,19,2023-05-28,Old City/Charminar
+17.357693,78.475084,eve_teasing,2,1,2024-07-27,Old City/Charminar
+17.359041,78.477338,assault,1,17,2023-10-21,Old City/Charminar
+17.363003,78.472122,theft,3,0,2024-02-09,Old City/Charminar
+17.364235,78.47455,eve_teasing,2,4,2023-02-19,Old City/Charminar
+17.361136,78.473415,stalking,2,9,2023-05-23,Old City/Charminar
+17.362696,78.475938,theft,2,20,2023-09-25,Old City/Charminar
+17.360063,78.472259,stalking,3,2,2023-12-09,Old City/Charminar
+17.361258,78.47218,assault,3,18,2024-11-17,Old City/Charminar
+17.363229,78.472703,robbery,2,6,2024-08-10,Old City/Charminar
+17.362256,78.477314,harassment,3,2,2024-08-10,Old City/Charminar
+17.362467,78.476594,eve_teasing,2,20,2024-05-29,Old City/Charminar
+17.360189,78.472783,eve_teasing,3,1,2023-11-17,Old City/Charminar
+17.364505,78.469651,theft,3,16,2024-07-12,Old City/Charminar
+17.363359,78.476834,theft,3,0,2023-09-11,Old City/Charminar
+17.364174,78.474126,robbery,1,3,2024-09-14,Old City/Charminar
+17.358842,78.476191,stalking,3,17,2023-04-03,Old City/Charminar
+17.362076,78.476577,harassment,2,21,2023-10-24,Old City/Charminar
+17.359614,78.473611,eve_teasing,3,20,2024-05-23,Old City/Charminar
+17.360192,78.474737,robbery,1,19,2023-04-22,Old City/Charminar
+17.363596,78.474405,assault,3,16,2024-03-19,Old City/Charminar
+17.357259,78.470732,robbery,2,22,2024-12-03,Old City/Charminar
+17.358884,78.473566,theft,1,20,2023-07-10,Old City/Charminar
+17.358799,78.474084,theft,3,22,2023-03-12,Old City/Charminar
+17.364121,78.469518,theft,3,14,2024-02-04,Old City/Charminar
+17.357262,78.474916,assault,2,8,2024-06-09,Old City/Charminar
+17.361666,78.479505,eve_teasing,2,1,2024-07-06,Old City/Charminar
+17.36226,78.478778,robbery,3,2,2023-08-29,Old City/Charminar
+17.36599,78.471134,theft,3,22,2024-12-23,Old City/Charminar
+17.35747,78.476605,harassment,3,23,2023-01-17,Old City/Charminar
+17.358553,78.475641,eve_teasing,3,10,2024-05-04,Old City/Charminar
+17.362843,78.471731,robbery,2,3,2023-12-12,Old City/Charminar
+17.359161,78.473454,stalking,2,0,2023-09-23,Old City/Charminar
+17.362071,78.474224,theft,3,1,2024-02-09,Old City/Charminar
+17.360141,78.474539,theft,2,20,2023-08-23,Old City/Charminar
+17.360102,78.471145,eve_teasing,3,13,2023-01-28,Old City/Charminar
+17.367985,78.472236,robbery,2,4,2023-05-28,Old City/Charminar
+17.362755,78.47423,stalking,1,23,2023-07-06,Old City/Charminar
+17.362938,78.473335,assault,2,23,2023-04-21,Old City/Charminar
+17.366337,78.47518,stalking,3,11,2024-10-14,Old City/Charminar
+17.365518,78.475358,robbery,2,5,2024-10-08,Old City/Charminar
+17.366207,78.47525,eve_teasing,3,3,2024-11-14,Old City/Charminar
+17.366553,78.479871,stalking,3,2,2023-09-26,Old City/Charminar
+17.358279,78.472016,harassment,1,23,2024-07-21,Old City/Charminar
+17.361585,78.47421,stalking,3,3,2023-07-23,Old City/Charminar
+17.363532,78.468549,eve_teasing,3,19,2024-01-05,Old City/Charminar
+17.357944,78.472066,stalking,2,20,2023-03-03,Old City/Charminar
+17.361692,78.473247,theft,1,10,2023-08-08,Old City/Charminar
+17.363214,78.478712,harassment,3,22,2023-12-31,Old City/Charminar
+17.362327,78.47523,eve_teasing,1,1,2023-03-19,Old City/Charminar
+17.362285,78.482252,eve_teasing,2,23,2024-06-22,Old City/Charminar
+17.35721,78.472928,theft,1,1,2023-01-14,Old City/Charminar
+17.359413,78.472738,robbery,3,12,2024-07-12,Old City/Charminar
+17.360012,78.472069,harassment,3,22,2024-04-20,Old City/Charminar
+17.357199,78.481088,assault,3,20,2024-09-05,Old City/Charminar
+17.370315,78.471185,theft,2,2,2024-03-09,Old City/Charminar
+17.366786,78.471739,stalking,3,22,2024-03-12,Old City/Charminar
+17.360472,78.474299,eve_teasing,2,0,2023-03-26,Old City/Charminar
+17.360801,78.475397,theft,3,14,2024-01-12,Old City/Charminar
+17.362066,78.475755,theft,1,22,2024-01-04,Old City/Charminar
+17.359435,78.475649,robbery,3,3,2023-06-16,Old City/Charminar
+17.36632,78.475858,assault,3,5,2023-02-05,Old City/Charminar
+17.362383,78.471363,eve_teasing,1,0,2023-10-22,Old City/Charminar
+17.356366,78.477482,stalking,2,23,2024-10-20,Old City/Charminar
+17.360185,78.475491,harassment,2,20,2024-06-23,Old City/Charminar
+17.360844,78.475158,eve_teasing,1,9,2024-09-18,Old City/Charminar
+17.360889,78.47523,assault,3,1,2023-11-13,Old City/Charminar
+17.362584,78.479882,robbery,2,5,2023-09-26,Old City/Charminar
+17.360614,78.474516,assault,2,4,2024-08-01,Old City/Charminar
+17.363348,78.479897,stalking,2,12,2023-08-28,Old City/Charminar
+17.366832,78.476017,assault,2,12,2024-07-13,Old City/Charminar
+17.359508,78.477669,harassment,3,19,2023-05-28,Old City/Charminar
+17.361028,78.478214,harassment,3,20,2024-02-28,Old City/Charminar
+17.356884,78.474499,eve_teasing,1,21,2024-11-30,Old City/Charminar
+17.366134,78.476613,stalking,2,23,2023-03-07,Old City/Charminar
+17.35795,78.472687,assault,2,2,2024-03-25,Old City/Charminar
+17.365066,78.476526,robbery,2,11,2024-06-15,Old City/Charminar
+17.362842,78.479549,theft,3,23,2024-03-13,Old City/Charminar
+17.363373,78.469955,theft,3,17,2024-06-16,Old City/Charminar
+17.359887,78.477141,robbery,2,22,2023-09-01,Old City/Charminar
+17.362303,78.475511,theft,2,4,2023-08-17,Old City/Charminar
+17.36275,78.477699,eve_teasing,2,6,2023-11-16,Old City/Charminar
+17.366044,78.472469,stalking,1,20,2024-03-23,Old City/Charminar
+17.361634,78.478687,robbery,3,23,2024-06-07,Old City/Charminar
+17.363262,78.481683,stalking,2,1,2023-12-16,Old City/Charminar
+17.360227,78.475024,harassment,3,21,2023-11-28,Old City/Charminar
+17.357845,78.469896,assault,2,4,2024-01-12,Old City/Charminar
+17.362429,78.470462,stalking,2,22,2024-12-28,Old City/Charminar
+17.360185,78.476078,eve_teasing,3,23,2023-01-18,Old City/Charminar
+17.362015,78.47698,harassment,2,0,2024-10-16,Old City/Charminar
+17.359486,78.474161,stalking,2,2,2023-01-11,Old City/Charminar
+17.363164,78.473902,stalking,3,0,2023-01-04,Old City/Charminar
+17.355621,78.470811,stalking,3,21,2023-06-28,Old City/Charminar
+17.363848,78.473845,eve_teasing,3,19,2024-07-17,Old City/Charminar
+17.365583,78.474493,eve_teasing,3,11,2024-01-30,Old City/Charminar
+17.361876,78.472188,theft,2,20,2023-04-24,Old City/Charminar
+17.358936,78.473626,eve_teasing,2,23,2024-07-01,Old City/Charminar
+17.362778,78.471578,harassment,3,22,2023-01-31,Old City/Charminar
+17.356107,78.477485,robbery,3,2,2023-10-02,Old City/Charminar
+17.359637,78.475984,stalking,3,14,2024-04-09,Old City/Charminar
+17.362686,78.478662,harassment,3,14,2024-01-28,Old City/Charminar
+17.360606,78.478044,theft,3,11,2023-04-19,Old City/Charminar
+17.362646,78.480553,eve_teasing,3,1,2024-11-22,Old City/Charminar
+17.364829,78.472163,assault,2,16,2024-03-22,Old City/Charminar
+17.362542,78.4722,stalking,3,14,2024-03-15,Old City/Charminar
+17.360224,78.47382,assault,2,3,2023-12-13,Old City/Charminar
+17.358714,78.475743,harassment,2,17,2024-03-04,Old City/Charminar
+17.363458,78.473682,harassment,2,8,2024-02-05,Old City/Charminar
+17.361619,78.482493,stalking,2,20,2024-02-12,Old City/Charminar
+17.363342,78.47453,stalking,2,21,2024-01-15,Old City/Charminar
+17.362891,78.472145,robbery,2,1,2023-02-10,Old City/Charminar
+17.364856,78.4758,eve_teasing,3,4,2023-07-24,Old City/Charminar
+17.360674,78.477507,eve_teasing,2,0,2023-11-15,Old City/Charminar
+17.357115,78.478792,theft,2,15,2023-04-23,Old City/Charminar
+17.357092,78.465806,harassment,1,23,2023-11-25,Old City/Charminar
+17.359921,78.476095,theft,3,6,2024-05-29,Old City/Charminar
+17.361898,78.474442,theft,3,12,2023-12-07,Old City/Charminar
+17.359535,78.477393,eve_teasing,1,13,2024-12-23,Old City/Charminar
+17.358937,78.478707,harassment,3,8,2024-09-07,Old City/Charminar
+17.365965,78.475094,robbery,3,9,2023-11-13,Old City/Charminar
+17.367715,78.521877,assault,1,0,2024-04-06,Dilsukhnagar
+17.370712,78.523084,assault,1,10,2024-03-04,Dilsukhnagar
+17.36644,78.519641,stalking,1,16,2024-02-11,Dilsukhnagar
+17.36804,78.524222,harassment,2,5,2023-02-12,Dilsukhnagar
+17.370921,78.526688,stalking,1,10,2024-01-23,Dilsukhnagar
+17.374905,78.524439,theft,2,14,2024-10-25,Dilsukhnagar
+17.365703,78.520967,harassment,2,12,2024-01-13,Dilsukhnagar
+17.368588,78.525703,eve_teasing,2,2,2024-04-05,Dilsukhnagar
+17.371501,78.526918,assault,3,22,2024-05-19,Dilsukhnagar
+17.369364,78.520356,robbery,2,3,2023-01-06,Dilsukhnagar
+17.366101,78.52527,theft,1,16,2024-10-03,Dilsukhnagar
+17.368042,78.52579,robbery,2,23,2024-06-10,Dilsukhnagar
+17.367919,78.521484,eve_teasing,3,20,2024-08-13,Dilsukhnagar
+17.366288,78.525406,robbery,2,23,2024-12-08,Dilsukhnagar
+17.369547,78.530164,stalking,2,4,2023-01-04,Dilsukhnagar
+17.364957,78.523429,eve_teasing,1,23,2023-12-24,Dilsukhnagar
+17.369525,78.519375,assault,2,21,2024-04-19,Dilsukhnagar
+17.366917,78.52279,eve_teasing,3,21,2024-11-06,Dilsukhnagar
+17.370144,78.519643,stalking,3,1,2024-11-11,Dilsukhnagar
+17.364529,78.526039,theft,3,20,2024-09-23,Dilsukhnagar
+17.370941,78.525425,stalking,3,16,2023-06-20,Dilsukhnagar
+17.368896,78.525507,stalking,3,0,2024-05-09,Dilsukhnagar
+17.3672,78.523465,harassment,2,3,2023-10-30,Dilsukhnagar
+17.373633,78.532348,stalking,1,14,2023-08-07,Dilsukhnagar
+17.367869,78.523841,harassment,1,2,2024-05-10,Dilsukhnagar
+17.370374,78.520217,eve_teasing,2,23,2024-08-12,Dilsukhnagar
+17.369316,78.523688,harassment,3,14,2023-05-17,Dilsukhnagar
+17.364988,78.519508,stalking,3,22,2023-10-14,Dilsukhnagar
+17.374343,78.524177,eve_teasing,2,0,2023-09-14,Dilsukhnagar
+17.369758,78.522093,assault,1,4,2024-04-08,Dilsukhnagar
+17.367829,78.519624,stalking,2,12,2024-12-16,Dilsukhnagar
+17.368555,78.519583,assault,2,22,2023-08-26,Dilsukhnagar
+17.367232,78.517006,assault,2,17,2023-01-19,Dilsukhnagar
+17.36485,78.527207,assault,3,22,2023-04-24,Dilsukhnagar
+17.369955,78.525961,assault,2,20,2024-04-08,Dilsukhnagar
+17.370675,78.528455,robbery,2,21,2024-05-07,Dilsukhnagar
+17.367297,78.523394,robbery,3,13,2023-08-22,Dilsukhnagar
+17.367423,78.523426,eve_teasing,2,8,2024-01-10,Dilsukhnagar
+17.371656,78.517945,theft,3,0,2023-02-07,Dilsukhnagar
+17.365909,78.521955,assault,3,4,2024-01-12,Dilsukhnagar
+17.368065,78.521608,harassment,2,0,2024-10-17,Dilsukhnagar
+17.366068,78.526376,theft,2,7,2023-10-15,Dilsukhnagar
+17.368759,78.526805,robbery,1,0,2023-03-23,Dilsukhnagar
+17.365152,78.52001,harassment,2,20,2023-11-11,Dilsukhnagar
+17.365733,78.524411,assault,3,3,2024-10-29,Dilsukhnagar
+17.366031,78.529084,robbery,2,23,2023-08-30,Dilsukhnagar
+17.36538,78.521341,stalking,2,2,2024-03-16,Dilsukhnagar
+17.368237,78.525534,eve_teasing,3,2,2023-01-07,Dilsukhnagar
+17.371221,78.51984,theft,2,3,2023-03-06,Dilsukhnagar
+17.365738,78.51912,harassment,2,21,2023-01-04,Dilsukhnagar
+17.374193,78.526249,stalking,2,21,2023-08-01,Dilsukhnagar
+17.367902,78.521655,assault,1,23,2024-03-16,Dilsukhnagar
+17.372208,78.521937,eve_teasing,3,21,2023-03-24,Dilsukhnagar
+17.372549,78.526606,harassment,2,1,2023-08-20,Dilsukhnagar
+17.369822,78.519349,robbery,3,2,2024-04-26,Dilsukhnagar
+17.373845,78.529887,theft,2,22,2023-08-20,Dilsukhnagar
+17.372852,78.524736,theft,3,19,2023-02-13,Dilsukhnagar
+17.368981,78.520792,assault,3,0,2023-01-03,Dilsukhnagar
+17.374193,78.527383,robbery,3,22,2023-03-08,Dilsukhnagar
+17.368191,78.521453,stalking,3,0,2023-07-19,Dilsukhnagar
+17.365049,78.526234,robbery,2,21,2023-05-19,Dilsukhnagar
+17.371787,78.527878,eve_teasing,1,3,2024-09-29,Dilsukhnagar
+17.366265,78.521449,harassment,2,18,2024-01-24,Dilsukhnagar
+17.3721,78.524303,theft,2,7,2024-12-18,Dilsukhnagar
+17.369452,78.524094,eve_teasing,2,11,2023-11-09,Dilsukhnagar
+17.366916,78.525634,robbery,2,18,2023-10-16,Dilsukhnagar
+17.36962,78.521282,assault,3,2,2024-11-02,Dilsukhnagar
+17.369755,78.521214,stalking,2,20,2023-12-09,Dilsukhnagar
+17.368887,78.524793,robbery,2,20,2024-04-21,Dilsukhnagar
+17.369988,78.529384,theft,2,22,2023-03-18,Dilsukhnagar
+17.366541,78.522017,harassment,3,2,2023-11-11,Dilsukhnagar
+17.367792,78.530415,theft,1,20,2023-10-03,Dilsukhnagar
+17.36852,78.525093,harassment,3,15,2024-02-22,Dilsukhnagar
+17.366678,78.527607,harassment,2,9,2024-11-13,Dilsukhnagar
+17.371526,78.524793,robbery,2,1,2023-08-31,Dilsukhnagar
+17.370075,78.518889,eve_teasing,3,3,2024-11-28,Dilsukhnagar
+17.364473,78.524525,harassment,1,3,2023-12-15,Dilsukhnagar
+17.364773,78.523479,assault,3,3,2023-12-08,Dilsukhnagar
+17.369637,78.521676,eve_teasing,1,17,2024-05-06,Dilsukhnagar
+17.362924,78.524663,robbery,3,20,2023-08-04,Dilsukhnagar
+17.393216,78.435077,eve_teasing,1,23,2023-09-17,Mehdipatnam
+17.39002,78.435267,stalking,1,13,2023-08-11,Mehdipatnam
+17.385795,78.429288,theft,2,12,2024-01-16,Mehdipatnam
+17.393416,78.433465,eve_teasing,3,14,2024-09-13,Mehdipatnam
+17.390713,78.435837,stalking,2,7,2023-03-23,Mehdipatnam
+17.392858,78.439165,theft,2,1,2024-11-18,Mehdipatnam
+17.392624,78.430569,robbery,3,21,2024-03-26,Mehdipatnam
+17.394491,78.436067,assault,3,19,2023-06-29,Mehdipatnam
+17.396773,78.438709,harassment,2,3,2023-09-01,Mehdipatnam
+17.392346,78.431799,assault,3,20,2024-10-10,Mehdipatnam
+17.392802,78.440047,robbery,2,12,2024-08-25,Mehdipatnam
+17.393527,78.434418,robbery,3,10,2024-11-26,Mehdipatnam
+17.398242,78.435329,robbery,2,2,2023-05-01,Mehdipatnam
+17.396121,78.436998,assault,3,4,2024-10-31,Mehdipatnam
+17.394772,78.438001,stalking,2,12,2024-04-27,Mehdipatnam
+17.384508,78.435549,assault,2,9,2024-06-25,Mehdipatnam
+17.394655,78.435833,theft,2,0,2024-11-11,Mehdipatnam
+17.391848,78.441129,robbery,3,21,2024-07-02,Mehdipatnam
+17.398151,78.434793,harassment,2,16,2024-07-04,Mehdipatnam
+17.389206,78.433633,eve_teasing,1,9,2023-02-15,Mehdipatnam
+17.393404,78.433552,theft,2,6,2023-04-22,Mehdipatnam
+17.390301,78.431275,stalking,2,17,2023-12-03,Mehdipatnam
+17.389049,78.435731,harassment,1,4,2024-02-10,Mehdipatnam
+17.395507,78.435523,assault,2,8,2023-01-30,Mehdipatnam
+17.394293,78.433492,theft,2,4,2023-09-21,Mehdipatnam
+17.398683,78.438344,stalking,2,13,2023-10-22,Mehdipatnam
+17.3956,78.434764,theft,1,7,2023-05-19,Mehdipatnam
+17.391112,78.433157,harassment,2,1,2023-11-18,Mehdipatnam
+17.394321,78.43641,eve_teasing,2,17,2023-08-11,Mehdipatnam
+17.389596,78.438727,eve_teasing,3,22,2024-07-22,Mehdipatnam
+17.390165,78.431337,assault,3,3,2024-07-13,Mehdipatnam
+17.395159,78.43542,eve_teasing,1,2,2024-10-26,Mehdipatnam
+17.395148,78.428076,theft,1,15,2024-06-28,Mehdipatnam
+17.393286,78.437537,assault,2,6,2024-12-13,Mehdipatnam
+17.391799,78.435855,harassment,2,22,2024-12-03,Mehdipatnam
+17.391627,78.436817,harassment,1,4,2024-09-15,Mehdipatnam
+17.396222,78.436496,robbery,2,4,2024-08-13,Mehdipatnam
+17.391687,78.436028,assault,3,23,2024-09-07,Mehdipatnam
+17.389575,78.433788,assault,2,10,2024-04-02,Mehdipatnam
+17.397716,78.43485,robbery,2,3,2023-07-31,Mehdipatnam
+17.394634,78.433939,assault,3,21,2023-08-01,Mehdipatnam
+17.391367,78.434219,stalking,3,21,2023-09-03,Mehdipatnam
+17.397635,78.434168,theft,2,1,2023-03-26,Mehdipatnam
+17.388522,78.431661,robbery,1,7,2023-04-23,Mehdipatnam
+17.401728,78.43264,assault,1,0,2024-11-16,Mehdipatnam
+17.394598,78.434586,eve_teasing,2,17,2024-10-07,Mehdipatnam
+17.389106,78.429769,harassment,3,7,2024-01-05,Mehdipatnam
+17.393326,78.436785,harassment,2,23,2024-04-21,Mehdipatnam
+17.396979,78.439138,theft,2,23,2023-08-22,Mehdipatnam
+17.39669,78.436242,assault,3,18,2023-02-07,Mehdipatnam
+17.390008,78.436502,theft,2,21,2024-11-14,Mehdipatnam
+17.395821,78.438862,robbery,2,10,2024-08-08,Mehdipatnam
+17.392579,78.434706,harassment,1,1,2023-08-26,Mehdipatnam
+17.394356,78.431434,eve_teasing,2,0,2023-02-08,Mehdipatnam
+17.391051,78.433693,eve_teasing,3,17,2024-06-29,Mehdipatnam
+17.393005,78.433668,theft,3,21,2024-09-20,Mehdipatnam
+17.392511,78.432342,eve_teasing,3,6,2024-02-03,Mehdipatnam
+17.393485,78.434512,theft,3,20,2024-01-04,Mehdipatnam
+17.398456,78.427441,robbery,3,2,2024-04-18,Mehdipatnam
+17.39537,78.435819,theft,2,2,2023-05-09,Mehdipatnam
+17.396391,78.434952,theft,1,1,2024-12-22,Mehdipatnam
+17.395393,78.434732,harassment,3,23,2024-09-30,Mehdipatnam
+17.385947,78.430147,harassment,3,17,2024-11-22,Mehdipatnam
+17.388778,78.431445,assault,2,21,2024-02-07,Mehdipatnam
+17.398705,78.433165,harassment,3,15,2023-09-29,Mehdipatnam
+17.392949,78.431406,robbery,3,21,2024-07-07,Mehdipatnam
+17.391014,78.434846,theft,3,11,2023-04-29,Mehdipatnam
+17.395864,78.431999,assault,1,0,2023-02-18,Mehdipatnam
+17.389171,78.433451,theft,2,2,2024-09-05,Mehdipatnam
+17.397895,78.437423,stalking,1,0,2024-11-13,Mehdipatnam
+17.445701,78.504181,robbery,2,18,2023-01-20,Secunderabad Station
+17.436725,78.494332,assault,2,2,2023-11-05,Secunderabad Station
+17.439593,78.496348,assault,2,5,2023-06-28,Secunderabad Station
+17.446745,78.499193,eve_teasing,3,2,2024-03-21,Secunderabad Station
+17.439342,78.496159,theft,2,1,2023-02-07,Secunderabad Station
+17.433151,78.494714,eve_teasing,2,20,2024-09-14,Secunderabad Station
+17.443772,78.499533,eve_teasing,3,0,2023-06-03,Secunderabad Station
+17.442086,78.49657,robbery,2,21,2024-02-26,Secunderabad Station
+17.438251,78.494932,assault,2,10,2023-07-31,Secunderabad Station
+17.44016,78.499281,stalking,1,1,2024-03-02,Secunderabad Station
+17.441612,78.500155,stalking,2,22,2023-01-23,Secunderabad Station
+17.444951,78.496707,harassment,2,16,2023-11-12,Secunderabad Station
+17.438664,78.492877,theft,2,4,2023-07-17,Secunderabad Station
+17.44445,78.495909,robbery,2,13,2024-04-25,Secunderabad Station
+17.438015,78.500623,eve_teasing,2,1,2023-08-12,Secunderabad Station
+17.442898,78.498592,eve_teasing,3,13,2023-06-06,Secunderabad Station
+17.439751,78.497954,harassment,1,22,2023-05-13,Secunderabad Station
+17.441681,78.502911,harassment,1,6,2024-11-21,Secunderabad Station
+17.441019,78.496429,stalking,2,0,2024-11-14,Secunderabad Station
+17.440991,78.497646,theft,2,21,2024-06-26,Secunderabad Station
+17.433858,78.500688,robbery,2,21,2024-11-14,Secunderabad Station
+17.43983,78.504311,assault,3,3,2024-02-17,Secunderabad Station
+17.438583,78.497116,eve_teasing,2,12,2023-06-25,Secunderabad Station
+17.435173,78.496316,stalking,3,14,2023-05-17,Secunderabad Station
+17.44006,78.492047,robbery,1,10,2023-06-28,Secunderabad Station
+17.432458,78.495311,harassment,3,5,2023-11-07,Secunderabad Station
+17.438857,78.49476,stalking,1,21,2023-02-20,Secunderabad Station
+17.441596,78.503809,assault,2,11,2023-01-18,Secunderabad Station
+17.435445,78.501871,harassment,2,18,2023-03-24,Secunderabad Station
+17.435211,78.498986,robbery,1,11,2023-12-04,Secunderabad Station
+17.435133,78.497929,harassment,2,4,2023-05-16,Secunderabad Station
+17.44253,78.49911,eve_teasing,2,23,2024-08-13,Secunderabad Station
+17.441306,78.500274,stalking,3,16,2023-09-20,Secunderabad Station
+17.441183,78.499617,robbery,2,23,2024-01-26,Secunderabad Station
+17.44683,78.499281,assault,1,4,2024-01-17,Secunderabad Station
+17.439141,78.499987,stalking,1,1,2024-09-03,Secunderabad Station
+17.442066,78.504039,stalking,2,12,2023-02-20,Secunderabad Station
+17.438669,78.497538,stalking,1,0,2023-11-21,Secunderabad Station
+17.4347,78.500886,theft,2,4,2023-05-25,Secunderabad Station
+17.443886,78.502037,stalking,2,21,2024-05-31,Secunderabad Station
+17.442387,78.499515,robbery,3,1,2024-11-04,Secunderabad Station
+17.441568,78.498832,theft,3,23,2024-10-18,Secunderabad Station
+17.443578,78.489699,robbery,2,6,2023-07-24,Secunderabad Station
+17.440183,78.502046,robbery,1,20,2023-02-26,Secunderabad Station
+17.437153,78.496284,stalking,1,0,2023-08-19,Secunderabad Station
+17.434286,78.503887,eve_teasing,1,11,2023-06-09,Secunderabad Station
+17.441627,78.494071,eve_teasing,2,0,2023-09-17,Secunderabad Station
+17.438425,78.496558,eve_teasing,2,22,2024-02-20,Secunderabad Station
+17.441855,78.498274,theft,2,21,2024-09-22,Secunderabad Station
+17.435196,78.502083,harassment,2,1,2023-09-11,Secunderabad Station
+17.446588,78.501286,harassment,3,5,2023-08-26,Secunderabad Station
+17.439272,78.499472,theft,1,17,2023-08-23,Secunderabad Station
+17.437166,78.500773,theft,2,20,2024-10-20,Secunderabad Station
+17.439087,78.495513,assault,1,10,2023-03-20,Secunderabad Station
+17.440611,78.49805,stalking,2,23,2023-03-14,Secunderabad Station
+17.443263,78.496306,robbery,3,14,2023-02-18,Secunderabad Station
+17.444216,78.497868,harassment,2,23,2023-01-13,Secunderabad Station
+17.43898,78.49652,robbery,1,21,2023-02-14,Secunderabad Station
+17.439584,78.497114,stalking,2,16,2023-05-21,Secunderabad Station
+17.440172,78.503656,stalking,2,18,2024-04-28,Secunderabad Station
+17.382826,78.484139,harassment,2,21,2023-09-27,Koti
+17.381141,78.482619,harassment,1,20,2023-06-07,Koti
+17.385328,78.490075,robbery,1,20,2023-06-13,Koti
+17.384512,78.492988,stalking,2,2,2024-11-28,Koti
+17.390118,78.48805,assault,1,22,2024-06-15,Koti
+17.387333,78.484272,theft,1,10,2023-09-19,Koti
+17.385985,78.487236,assault,2,1,2024-05-31,Koti
+17.381785,78.485639,harassment,2,20,2023-12-18,Koti
+17.38155,78.488836,assault,2,21,2023-07-22,Koti
+17.388975,78.487691,assault,2,6,2023-12-08,Koti
+17.378678,78.486571,assault,2,3,2023-09-24,Koti
+17.386644,78.489387,eve_teasing,3,3,2023-09-27,Koti
+17.385631,78.484555,robbery,2,17,2023-01-18,Koti
+17.381196,78.478451,stalking,2,22,2024-10-11,Koti
+17.383727,78.489937,theft,2,0,2024-02-28,Koti
+17.386852,78.488366,robbery,2,13,2024-02-19,Koti
+17.381506,78.492726,theft,2,21,2023-02-20,Koti
+17.382209,78.491249,stalking,2,4,2024-10-11,Koti
+17.385711,78.486385,theft,1,23,2023-11-12,Koti
+17.38259,78.488354,robbery,2,2,2023-05-04,Koti
+17.382827,78.484955,theft,2,21,2023-01-03,Koti
+17.382814,78.489015,theft,2,3,2024-08-15,Koti
+17.383824,78.48712,assault,1,21,2023-11-03,Koti
+17.383096,78.48321,assault,1,8,2023-07-13,Koti
+17.380239,78.486775,theft,1,20,2024-02-27,Koti
+17.380639,78.482913,robbery,1,13,2023-01-04,Koti
+17.378357,78.487737,assault,2,11,2024-06-16,Koti
+17.382891,78.486342,theft,2,5,2024-06-29,Koti
+17.387828,78.483745,harassment,2,10,2024-06-24,Koti
+17.384478,78.484511,stalking,2,7,2024-12-18,Koti
+17.385963,78.487416,eve_teasing,2,20,2023-03-05,Koti
+17.388398,78.490494,theft,2,2,2023-05-27,Koti
+17.389074,78.488224,assault,1,22,2024-01-29,Koti
+17.385865,78.485943,theft,2,1,2023-07-05,Koti
+17.382966,78.488296,stalking,2,21,2024-04-06,Koti
+17.382719,78.488432,robbery,1,20,2024-04-11,Koti
+17.388527,78.487277,harassment,3,21,2023-02-22,Koti
+17.386125,78.489934,assault,1,15,2023-08-12,Koti
+17.385438,78.486649,eve_teasing,1,23,2023-03-19,Koti
+17.387921,78.486725,theft,2,20,2024-01-21,Koti
+17.386509,78.479458,robbery,2,3,2023-08-14,Koti
+17.384642,78.490209,harassment,3,21,2023-10-16,Koti
+17.38348,78.490519,theft,1,18,2023-07-04,Koti
+17.380298,78.487865,harassment,2,20,2024-12-02,Koti
+17.385386,78.493861,robbery,2,16,2024-04-26,Koti
+17.388574,78.484611,robbery,1,22,2023-10-29,Koti
+17.385846,78.484604,harassment,2,23,2023-12-17,Koti
+17.38635,78.486018,stalking,2,15,2023-09-03,Koti
+17.386094,78.484522,stalking,2,3,2024-11-01,Koti
+17.383387,78.490385,theft,2,4,2023-02-10,Koti
+17.347785,78.552844,stalking,2,23,2024-09-25,LB Nagar
+17.344682,78.547954,eve_teasing,2,22,2024-06-28,LB Nagar
+17.345653,78.553331,robbery,1,3,2024-08-03,LB Nagar
+17.350011,78.548716,assault,2,16,2024-06-02,LB Nagar
+17.342424,78.55281,eve_teasing,2,8,2023-02-14,LB Nagar
+17.352475,78.551608,harassment,3,4,2024-08-15,LB Nagar
+17.351323,78.55176,assault,3,22,2024-05-09,LB Nagar
+17.347815,78.553919,stalking,2,1,2023-06-04,LB Nagar
+17.345207,78.550112,eve_teasing,3,1,2023-01-22,LB Nagar
+17.346578,78.550512,eve_teasing,2,16,2024-07-19,LB Nagar
+17.349127,78.552008,robbery,1,19,2023-10-30,LB Nagar
+17.352144,78.547995,robbery,2,21,2023-05-04,LB Nagar
+17.349734,78.550934,theft,2,21,2024-05-18,LB Nagar
+17.351414,78.549776,assault,3,20,2023-02-26,LB Nagar
+17.347925,78.554779,robbery,1,22,2023-03-23,LB Nagar
+17.347703,78.555398,assault,2,16,2024-02-09,LB Nagar
+17.356203,78.549008,stalking,2,19,2024-03-26,LB Nagar
+17.34751,78.548929,theft,1,7,2023-11-23,LB Nagar
+17.34575,78.554626,assault,2,20,2024-07-16,LB Nagar
+17.348467,78.550746,assault,2,9,2024-07-09,LB Nagar
+17.354518,78.555459,theft,3,10,2024-12-01,LB Nagar
+17.346036,78.556487,harassment,2,11,2023-02-22,LB Nagar
+17.342091,78.54915,robbery,2,9,2024-12-07,LB Nagar
+17.344624,78.553005,stalking,2,1,2023-06-08,LB Nagar
+17.349376,78.552922,robbery,1,20,2024-06-01,LB Nagar
+17.348418,78.551656,eve_teasing,2,2,2024-11-17,LB Nagar
+17.349281,78.553427,robbery,1,7,2023-07-31,LB Nagar
+17.343637,78.553531,theft,3,20,2024-01-01,LB Nagar
+17.352282,78.546242,theft,2,4,2023-09-13,LB Nagar
+17.349911,78.550714,assault,1,23,2024-12-26,LB Nagar
+17.350852,78.551318,theft,3,23,2023-08-24,LB Nagar
+17.351334,78.549461,assault,2,8,2023-08-10,LB Nagar
+17.354076,78.549472,stalking,3,21,2024-12-02,LB Nagar
+17.346048,78.553344,assault,2,11,2024-02-14,LB Nagar
+17.350059,78.551324,theft,1,4,2023-11-06,LB Nagar
+17.349433,78.554737,assault,1,8,2024-09-12,LB Nagar
+17.343287,78.552198,stalking,1,0,2024-12-13,LB Nagar
+17.347475,78.552794,assault,3,0,2023-07-20,LB Nagar
+17.350825,78.550024,theft,2,21,2023-03-16,LB Nagar
+17.345209,78.554067,eve_teasing,1,1,2023-11-20,LB Nagar
+17.440472,78.44957,eve_teasing,2,2,2024-03-09,Ameerpet
+17.436288,78.449407,stalking,3,17,2023-05-29,Ameerpet
+17.435551,78.445117,stalking,3,10,2024-02-13,Ameerpet
+17.442827,78.452976,assault,1,0,2023-06-13,Ameerpet
+17.441666,78.44733,robbery,2,8,2024-02-01,Ameerpet
+17.434209,78.449299,harassment,1,19,2024-08-14,Ameerpet
+17.440474,78.44635,harassment,1,3,2023-05-11,Ameerpet
+17.435655,78.444047,eve_teasing,2,2,2023-10-30,Ameerpet
+17.434173,78.447036,robbery,2,23,2024-01-24,Ameerpet
+17.439257,78.445217,eve_teasing,1,20,2023-01-09,Ameerpet
+17.43599,78.450006,assault,3,13,2024-07-30,Ameerpet
+17.428649,78.452271,eve_teasing,3,7,2024-03-24,Ameerpet
+17.440476,78.447748,harassment,1,1,2024-05-28,Ameerpet
+17.431635,78.452087,theft,1,4,2024-01-08,Ameerpet
+17.435651,78.445648,eve_teasing,2,2,2023-10-03,Ameerpet
+17.436189,78.44611,assault,1,3,2024-06-19,Ameerpet
+17.442213,78.4486,assault,3,3,2024-03-06,Ameerpet
+17.433576,78.448984,harassment,2,23,2024-05-20,Ameerpet
+17.436261,78.443291,theft,1,4,2023-08-15,Ameerpet
+17.443403,78.448869,eve_teasing,2,4,2023-07-28,Ameerpet
+17.435438,78.449346,assault,3,8,2024-08-07,Ameerpet
+17.436541,78.446942,stalking,2,10,2024-10-08,Ameerpet
+17.436587,78.447992,assault,1,0,2024-01-31,Ameerpet
+17.437134,78.447409,assault,1,11,2023-10-30,Ameerpet
+17.43648,78.449014,theft,1,5,2023-08-28,Ameerpet
+17.43172,78.449352,harassment,2,9,2023-07-01,Ameerpet
+17.437912,78.447019,eve_teasing,2,12,2023-05-30,Ameerpet
+17.43653,78.449295,harassment,1,7,2023-09-09,Ameerpet
+17.433319,78.449872,stalking,3,0,2024-12-16,Ameerpet
+17.437664,78.449876,harassment,1,16,2024-07-28,Ameerpet
+17.435808,78.455342,theft,2,8,2024-12-01,Ameerpet
+17.438156,78.444486,harassment,2,0,2024-12-21,Ameerpet
+17.434067,78.452266,harassment,2,10,2023-04-21,Ameerpet
+17.439376,78.448669,stalking,1,3,2024-11-21,Ameerpet
+17.437316,78.446719,harassment,2,23,2024-06-17,Ameerpet
+17.43503,78.44909,harassment,3,22,2024-01-04,Ameerpet
+17.432985,78.450395,robbery,3,6,2023-08-29,Ameerpet
+17.441325,78.44722,harassment,1,0,2023-08-09,Ameerpet
+17.437741,78.450911,theft,1,2,2024-01-06,Ameerpet
+17.438284,78.451468,theft,2,20,2023-09-12,Ameerpet
+17.42671,78.403063,eve_teasing,1,14,2023-07-14,Jubilee Hills
+17.429307,78.403831,assault,2,10,2023-01-29,Jubilee Hills
+17.432477,78.415772,theft,2,1,2023-08-05,Jubilee Hills
+17.427521,78.401769,theft,2,19,2024-06-02,Jubilee Hills
+17.424659,78.412367,harassment,2,11,2024-08-25,Jubilee Hills
+17.428481,78.410094,harassment,1,22,2023-01-11,Jubilee Hills
+17.428412,78.406174,stalking,2,3,2023-09-03,Jubilee Hills
+17.429169,78.403342,assault,1,6,2023-10-04,Jubilee Hills
+17.422532,78.404455,assault,2,0,2023-06-14,Jubilee Hills
+17.429475,78.410267,assault,1,11,2024-11-08,Jubilee Hills
+17.427596,78.405312,eve_teasing,2,20,2024-06-19,Jubilee Hills
+17.429396,78.409656,stalking,2,21,2024-07-13,Jubilee Hills
+17.431612,78.404786,robbery,2,23,2023-11-22,Jubilee Hills
+17.423857,78.405059,theft,2,20,2023-01-25,Jubilee Hills
+17.427464,78.411403,harassment,1,1,2024-07-02,Jubilee Hills
+17.430171,78.408689,assault,1,3,2023-11-24,Jubilee Hills
+17.430468,78.406422,eve_teasing,1,3,2024-09-20,Jubilee Hills
+17.431318,78.408865,stalking,2,7,2024-01-02,Jubilee Hills
+17.429203,78.407116,eve_teasing,2,4,2024-03-20,Jubilee Hills
+17.430267,78.410405,harassment,1,23,2023-07-07,Jubilee Hills
+17.427866,78.408172,harassment,1,1,2024-11-07,Jubilee Hills
+17.431539,78.408157,harassment,1,3,2024-03-02,Jubilee Hills
+17.428003,78.415312,robbery,1,20,2023-07-09,Jubilee Hills
+17.426172,78.41001,eve_teasing,2,11,2023-02-19,Jubilee Hills
+17.428809,78.409394,robbery,2,23,2023-07-10,Jubilee Hills
+17.430803,78.408198,stalking,2,20,2024-03-04,Jubilee Hills
+17.426768,78.405635,theft,2,23,2024-07-11,Jubilee Hills
+17.432903,78.4091,robbery,2,1,2024-11-04,Jubilee Hills
+17.437438,78.402072,harassment,1,4,2023-08-27,Jubilee Hills
+17.425767,78.406301,robbery,1,22,2023-05-19,Jubilee Hills
+17.342355,78.367743,harassment,1,0,2023-03-27,Himayat Sagar/Lords
+17.348563,78.367003,harassment,1,23,2023-03-10,Himayat Sagar/Lords
+17.336978,78.366352,robbery,1,4,2024-11-16,Himayat Sagar/Lords
+17.343847,78.368478,robbery,1,5,2023-02-14,Himayat Sagar/Lords
+17.34231,78.366819,assault,1,3,2023-08-13,Himayat Sagar/Lords
+17.341555,78.36386,harassment,1,20,2024-01-25,Himayat Sagar/Lords
+17.342472,78.368114,assault,1,11,2023-03-31,Himayat Sagar/Lords
+17.343513,78.368133,stalking,1,19,2023-11-10,Himayat Sagar/Lords
+17.345139,78.370175,eve_teasing,1,13,2023-01-23,Himayat Sagar/Lords
+17.342234,78.366006,eve_teasing,1,22,2024-06-12,Himayat Sagar/Lords
+17.440378,78.346595,robbery,1,21,2024-01-19,Gachibowli
+17.440803,78.349353,stalking,1,22,2023-06-07,Gachibowli
+17.440932,78.350355,eve_teasing,1,4,2024-05-29,Gachibowli
+17.43733,78.345768,theft,1,20,2024-10-10,Gachibowli
+17.437392,78.347985,assault,1,19,2024-03-04,Gachibowli
+17.442928,78.350377,harassment,1,20,2023-01-29,Gachibowli
+17.437866,78.348736,stalking,1,23,2023-08-17,Gachibowli
+17.442125,78.341756,theft,1,4,2023-11-15,Gachibowli
+17.441096,78.34964,assault,2,22,2024-03-26,Gachibowli
+17.437746,78.349315,stalking,1,4,2023-05-12,Gachibowli

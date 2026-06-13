@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
@@ -17,6 +18,7 @@ class GeofenceService {
   // Callbacks for UI
   Function()? onDriftAlert;
   Function(bg.GeofenceEvent)? onDangerZoneTrigger;
+  Function(double lat, double lng)? onLocationUpdate;
 
   Future<void> initialize() async {
     bg.BackgroundGeolocation.onLocation(_onLocation);
@@ -30,6 +32,16 @@ class GeofenceService {
       debug: false, // Turn off BG logging popup
       logLevel: bg.Config.LOG_LEVEL_OFF,
     ));
+
+    // Start passive tracking immediately so live_locations stays current
+    await bg.BackgroundGeolocation.start();
+
+    // Force an immediate first write. On a static emulator the distanceFilter
+    // may suppress the initial onLocation event, so fetch position explicitly.
+    bg.BackgroundGeolocation.getCurrentPosition(
+      samples: 1,
+      persist: false,
+    ).then(_onLocation).catchError((_) {});
   }
 
   void setupPolygons(List<dynamic> activeZones) async {
@@ -38,8 +50,13 @@ class GeofenceService {
     
     int index = 0;
     for (var zone in activeZones) {
-       if (zone['boundary'] != null && zone['boundary']['type'] == 'Polygon') {
-          List<dynamic> ringData = zone['boundary']['coordinates'][0];
+       if (zone['boundary'] != null) {
+          final rawB = zone['boundary'];
+          final Map<String, dynamic> bMap = rawB is String
+              ? jsonDecode(rawB) as Map<String, dynamic>
+              : rawB as Map<String, dynamic>;
+          if (bMap['type'] != 'Polygon') continue;
+          List<dynamic> ringData = bMap['coordinates'][0];
           
           // flutter_background_geolocation expects vertices as [lat, lng]
           List<List<double>> vertices = ringData.map<List<double>>((pt) {
@@ -57,6 +74,7 @@ class GeofenceService {
           ));
        }
     }
+
     
     if (bgGeofences.isNotEmpty) {
       await bg.BackgroundGeolocation.addGeofences(bgGeofences);
@@ -67,18 +85,28 @@ class GeofenceService {
     _activeTripId = tripId;
     _expectedRoute = route;
     _driftTimer?.cancel();
-    await bg.BackgroundGeolocation.start();
+    // BackgroundGeolocation already running from initialize()
   }
 
   Future<void> stopTripTracker() async {
     _activeTripId = null;
     _expectedRoute = null;
     _driftTimer?.cancel();
-    await bg.BackgroundGeolocation.stop();
+    // Keep BackgroundGeolocation running for passive live_locations updates
   }
 
   void cancelDriftTimer() {
     _driftTimer?.cancel();
+  }
+
+  /// Removes this user's row from live_locations. Call on logout or session expiry.
+  Future<void> clearLocation() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    await _supabase
+        .from('live_locations')
+        .delete()
+        .eq('user_id', userId);
   }
 
   void _onGeofence(bg.GeofenceEvent event) {
@@ -88,19 +116,45 @@ class GeofenceService {
   }
 
   void _onLocation(bg.Location location) {
+    final double userLat = location.coords.latitude;
+    final double userLng = location.coords.longitude;
+
+    // Notify home screen so _startLat/_startLng stays current
+    onLocationUpdate?.call(userLat, userLng);
+
+    // Always upsert to live_locations so dashboard beacon stays current
+    final userId = _supabase.auth.currentUser?.id;
+    print('[GeoFence] _onLocation fired. userId=$userId lat=$userLat lng=$userLng');
+    if (userId != null) {
+      print('[GeoFence] Attempting live_locations upsert for user: $userId');
+      _supabase.from('live_locations').upsert({
+        'user_id': userId,
+        'latitude': userLat,
+        'longitude': userLng,
+        'heading': location.coords.heading,
+        'speed': location.coords.speed,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'source_type': 'online',
+        'mesh_hop_count': 0,
+      }, onConflict: 'user_id').then((result) {
+        print('[GeoFence] live_locations upsert success: $result');
+      }).catchError((e) {
+        print('[GeoFence] live_locations upsert FAILED: $e');
+      });
+    } else {
+      print('[GeoFence] Skipping upsert — user not authenticated');
+    }
+
+    // Trip-specific writes and drift detection
     if (_expectedRoute == null || _expectedRoute!.isEmpty || _activeTripId == null) return;
 
-    double userLat = location.coords.latitude;
-    double userLng = location.coords.longitude;
-
-    // Send the PostGIS Ping payload!
-    try {
+    if (userId != null) {
       _supabase.from('trip_pings').insert({
         'trip_id': _activeTripId,
         'current_location': 'SRID=4326;POINT($userLng $userLat)',
+      }).then((_) {}).catchError((e) {
+        print('Failed to send trip ping: $e');
       });
-    } catch (e) {
-      print('Failed to send trip ping: $e');
     }
 
     // Cross-track error (perpendicular drift distance)

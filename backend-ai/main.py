@@ -75,19 +75,50 @@ def get_danger_zones(simulated_hour: Optional[int] = None):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to fetch zones: {exc}")
 
+@app.get("/heatmap")
+def get_heatmap(city: Optional[str] = None, hour: Optional[int] = None):
+    """
+    Returns heatmap zones from Supabase filtered by city and active hours.
+    active_hours='all' → always; 'night' → hour>=20 or hour<7; 'day' → 7<=hour<20
+    """
+    current_hour = hour if hour is not None else datetime.now().hour
+    try:
+        query = supabase.table("heatmap_zones").select("*")
+        if city:
+            query = query.eq("city", city)
+        result = query.execute()
+        zones = result.data or []
+
+        def is_active(zone: Dict[str, Any]) -> bool:
+            h = zone.get("active_hours", "all")
+            if h == "all":
+                return True
+            if h == "night":
+                return current_hour >= 20 or current_hour < 7
+            if h == "day":
+                return 7 <= current_hour < 20
+            return True
+
+        active_zones = [z for z in zones if is_active(z)]
+        return {"zones": active_zones, "count": len(active_zones), "hour": current_hour, "city": city or "all"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch heatmap: {exc}")
+
+
 @app.post("/get-safe-route")
 def calculate_safe_route(request: RouteRequest):
     """
     Phase 2 Logic: Real AI Routing
     """
-    print(f"📍 Calculating Safe Route: {request.start_lat},{request.start_lng} -> {request.end_lat},{request.end_lng}")
-    
+    print(f"[SafeRoute] Request: {request.start_lat},{request.start_lng} -> {request.end_lat},{request.end_lng}")
+
+    # Zone fetch is best-effort — if it fails, route without safety scoring.
     try:
         dynamic_zones = _fetch_dynamic_zones()
-    except HTTPException:
-        raise
+        print(f"[SafeRoute] Loaded {len(dynamic_zones)} zones")
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch zones: {exc}")
+        print(f"[SafeRoute] Zone fetch failed (non-fatal): {exc}")
+        dynamic_zones = []
 
     result = find_safest_route(
         request.start_lat,
@@ -97,7 +128,7 @@ def calculate_safe_route(request: RouteRequest):
         dynamic_zones,
     )
 
-    if result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=result.get("message", "Routing failed"))
-
+    # Always return 200 so Flutter can read the status/message field.
+    # Raising 500 causes Flutter to receive null and show a generic error.
+    print(f"[SafeRoute] Result status: {result.get('status')}")
     return result

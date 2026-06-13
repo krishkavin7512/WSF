@@ -1,4 +1,8 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:convert';
+import 'dart:math';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 // 1. HIDE 'Size' from Mapbox to avoid conflict with Flutter's Size
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
 import 'package:permission_handler/permission_handler.dart';
@@ -11,7 +15,8 @@ import 'package:mobile_app/services/mapbox_service.dart';
 import 'dart:async';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:mobile_app/services/audio_sentinel_service.dart';
-import 'package:flutter_background_geolocation/flutter_background_geolocation.dart' as bg;
+import 'package:flutter_background_geolocation/flutter_background_geolocation.dart'
+    as bg;
 import 'package:mobile_app/services/geofence_service.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -24,7 +29,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  static const EventChannel _volumeButtonChannel = EventChannel('wsf/hardware_buttons');
+  static const EventChannel _volumeButtonChannel =
+      EventChannel('wsf/hardware_buttons');
   MapboxMap? mapboxMap;
   PolygonAnnotationManager? _polygonManager;
   PolylineAnnotationManager? _polylineManager;
@@ -46,13 +52,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Timer? _debounce;
 
   // Coordinates
-  double _startLat = 12.8230; // Default: SRM University
-  double _startLng = 80.0444;
+  double _startLat =
+      17.3422; // Default: Lords Institute of Engineering & Technology, Hyderabad
+  double _startLng = 78.3663;
   double? _destLat;
   double? _destLng;
 
-  // Suggestions State
+  // Search Box API state
   List<Map<String, dynamic>> _suggestions = [];
+  String _searchSessionToken = '';
+  bool _isSearchLoading = false;
+
+  // Destination preview state (pin placed, waiting for user to confirm route)
+  bool _isPendingRoute = false;
+  String _pendingDestName = '';
+  Map<String, dynamic>? _pendingRouteData; // cached route result shown during preview
 
   // State Variables
   bool _isRouteActive = false;
@@ -63,6 +77,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _riskScore = 0;
   double _durationMin = 0;
 
+  // Multi-factor risk engine fields
+  String _riskLevel = 'low';       // 'low' | 'medium' | 'high'
+  String _riskExplanation = '';
+  int _highRiskSegmentCount = 0;
+
   List<Position> _currentRouteGeometry = [];
   String? _activeTripId;
   StreamSubscription? _volumeDownSubscription;
@@ -70,7 +89,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isImmediateSosDispatching = false;
 
   // ✅ NEW: Zone Logic Variables
-  List<dynamic> _activeZones = []; // Stores current zones for calculation
+  List<dynamic> _activeZones = [];
+  List<Map<String, dynamic>> _safeHavens = [];
+
+  // Heatmap
+  bool _showHeatmap = false;
+  List<Map<String, dynamic>> _heatmapZones = [];
+  PolygonAnnotationManager? _heatmapManager; // Stores current zones for calculation
   String _safetyStatusTitle = "SENTRA ACTIVE";
   String _safetyStatusSubtitle = "You are in a Safe Zone";
   Color _safetyPanelBg = SentraDesign.uberBlack;
@@ -85,14 +110,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _startController.text = "Current Location";
-    _requestPermissions();
     _initAudioSentinel();
-    _initBackgroundTracking(); // ✅ Start native tracking wrappers
     _initVolumeDownOverride();
+    _ensureProfile(); // upsert profile row so display is always fresh for this user
+    _requestPermissions().then((_) => _initBackgroundTracking());
   }
 
   @override
   void dispose() {
+    if (_activeTripId != null) {
+      Supabase.instance.client
+          .from('trips')
+          .update({
+            'status': 'completed',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', _activeTripId!)
+          .catchError((_) {});
+    }
     _startController.dispose();
     _destinationController.dispose();
     _startFocus.dispose();
@@ -108,6 +143,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       Permission.location,
       Permission.microphone,
     ].request();
+  }
+
+  /// Upserts the profiles row from live auth metadata every time HomeScreen mounts.
+  /// Ensures the display name/phone is always current for the logged-in user,
+  /// and creates the row for users who signed up before the auth trigger existed.
+  Future<void> _ensureProfile() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final metaName = user.userMetadata?['full_name'] as String?;
+    await Supabase.instance.client.from('profiles').upsert({
+      'id': user.id,
+      'full_name': metaName,
+      'phone': user.phone,
+    }, onConflict: 'id').catchError((_) {});
   }
 
   void _initAudioSentinel() async {
@@ -147,15 +196,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ✅ NEW: Geofence OS Tracking Engine
   void _initBackgroundTracking() async {
     final geofenceService = GeofenceService();
-    
+
     geofenceService.onDangerZoneTrigger = (bg.GeofenceEvent event) {
       if (mounted) {
         setState(() {
           if (event.action == "ENTER") {
-            String severity = event.extras != null && event.extras!['risk_level'] != null 
-                ? event.extras!['risk_level'] 
-                : "red";
-                
+            String severity =
+                event.extras != null && event.extras!['risk_level'] != null
+                    ? event.extras!['risk_level']
+                    : "red";
+
             if (severity == "yellow" || severity == "MODERATE") {
               _safetyStatusTitle = "CAUTION ADVISED";
               _safetyStatusSubtitle = "Entered Moderate Risk Zone";
@@ -185,18 +235,46 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         });
       }
     };
-    
+
     geofenceService.onDriftAlert = () {
-       if (mounted) {
-         _showDriftOverlay();
-       }
+      if (mounted) {
+        _showDriftOverlay();
+      }
     };
-    
+
+    geofenceService.onLocationUpdate = (lat, lng) {
+      if (mounted) {
+        setState(() {
+          _startLat = lat;
+          _startLng = lng;
+        });
+      }
+    };
+
     await geofenceService.initialize();
+    _loadSafeHavens();
   }
 
   _onMapCreated(MapboxMap mapboxMap) {
     this.mapboxMap = mapboxMap;
+
+    // Disable scale bar and move all ornaments to bottom-left
+    mapboxMap.scaleBar.updateSettings(ScaleBarSettings(enabled: false));
+    mapboxMap.compass.updateSettings(CompassSettings(
+      position: OrnamentPosition.BOTTOM_LEFT,
+      marginBottom: 80,
+      marginLeft: 8,
+    ));
+    mapboxMap.attribution.updateSettings(AttributionSettings(
+      position: OrnamentPosition.BOTTOM_LEFT,
+      marginBottom: 8,
+      marginLeft: 8,
+    ));
+    mapboxMap.logo.updateSettings(LogoSettings(
+      position: OrnamentPosition.BOTTOM_LEFT,
+      marginBottom: 8,
+      marginLeft: 96,
+    ));
 
     // ✅ NEW: Enable the Blue Dot (Location Component)
     mapboxMap.location.updateSettings(
@@ -218,6 +296,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
     mapboxMap.annotations.createPointAnnotationManager().then((manager) {
       _pointManager = manager;
+    });
+    mapboxMap.annotations.createPolygonAnnotationManager().then((manager) {
+      _heatmapManager = manager;
+      final hour = DateTime.now().hour;
+      if (hour >= 20 || hour < 7) {
+        setState(() => _showHeatmap = true);
+        _loadHeatmap();
+      }
     });
   }
 
@@ -241,7 +327,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     for (var zone in zones) {
       if (zone['boundary'] != null) {
         String severity = zone['risk_level'] ?? 'red';
-        
+
         // Render Red Zones with 40% Opacity
         int activeFillColor = severity == 'yellow'
             ? Colors.amber.withOpacity(0.40).value
@@ -249,38 +335,39 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         int activeStrokeColor = severity == 'yellow'
             ? Colors.amber.withOpacity(0.8).value
             : Colors.red.withOpacity(0.8).value;
-            
-        final boundary = zone['boundary'];
-        
+
+        final rawBoundary = zone['boundary'];
+        final boundary = rawBoundary is String
+            ? jsonDecode(rawBoundary) as Map<String, dynamic>
+            : rawBoundary as Map<String, dynamic>;
+
         if (boundary['type'] == 'Polygon') {
-            List<dynamic> ringData = boundary['coordinates'][0];
+          List<dynamic> ringData = boundary['coordinates'][0];
+          List<Position> geomPoints = ringData.map((pt) {
+            return Position(pt[0].toDouble(), pt[1].toDouble());
+          }).toList();
+
+          polygonOptions.add(
+            PolygonAnnotationOptions(
+              geometry: Polygon(coordinates: [geomPoints]),
+              fillColor: activeFillColor,
+              fillOutlineColor: activeStrokeColor,
+            ),
+          );
+        } else if (boundary['type'] == 'MultiPolygon') {
+          List<dynamic> polygons = boundary['coordinates'];
+          for (var poly in polygons) {
+            List<dynamic> ringData = poly[0];
             List<Position> geomPoints = ringData.map((pt) {
               return Position(pt[0].toDouble(), pt[1].toDouble());
             }).toList();
-            
-            polygonOptions.add(
-              PolygonAnnotationOptions(
-                geometry: Polygon(coordinates: [geomPoints]),
-                fillColor: activeFillColor,
-                fillOutlineColor: activeStrokeColor,
-              ),
-            );
-        } else if (boundary['type'] == 'MultiPolygon') {
-             List<dynamic> polygons = boundary['coordinates'];
-             for (var poly in polygons) {
-                 List<dynamic> ringData = poly[0];
-                 List<Position> geomPoints = ringData.map((pt) {
-                   return Position(pt[0].toDouble(), pt[1].toDouble());
-                 }).toList();
-                 
-                 polygonOptions.add(
-                     PolygonAnnotationOptions(
-                         geometry: Polygon(coordinates: [geomPoints]),
-                         fillColor: activeFillColor,
-                         fillOutlineColor: activeStrokeColor,
-                     )
-                 );
-             }
+
+            polygonOptions.add(PolygonAnnotationOptions(
+              geometry: Polygon(coordinates: [geomPoints]),
+              fillColor: activeFillColor,
+              fillOutlineColor: activeStrokeColor,
+            ));
+          }
         }
       }
     }
@@ -290,23 +377,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // --- SOS LOGIC ---
   void _showDriftOverlay() async {
     bool isSafe = await showGeneralDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.95),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, anim1, anim2) {
-        return const DriftSosOverlay();
-      },
-    ) ?? false;
+          context: context,
+          barrierDismissible: false,
+          barrierColor: Colors.black.withOpacity(0.95),
+          transitionDuration: const Duration(milliseconds: 300),
+          pageBuilder: (context, anim1, anim2) {
+            return const DriftSosOverlay();
+          },
+        ) ??
+        false;
 
     if (!isSafe && _activeTripId != null) {
       // User didn't answer within 15 seconds!
       try {
-        await Supabase.instance.client.from('trips').update({'status': 'sos'}).eq('id', _activeTripId as String);
+        await Supabase.instance.client
+            .from('trips')
+            .update({'status': 'sos'}).eq('id', _activeTripId as String);
       } catch (e) {
         print("Failed to dispatch SOS to Db: $e");
       }
-      _handleSosSequence(triggerReason: "No response after straying from expected route.");
+      _handleSosSequence(
+          triggerReason: "No response after straying from expected route.");
     }
   }
 
@@ -371,8 +462,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (_activeTripId != null) {
         await Supabase.instance.client
             .from('trips')
-            .update({'status': 'sos'})
-            .eq('id', _activeTripId as String);
+            .update({'status': 'sos'}).eq('id', _activeTripId as String);
       } else {
         final userId = Supabase.instance.client.auth.currentUser?.id;
         if (userId != null) {
@@ -419,47 +509,122 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _onSearchChanged(String query, bool isStart) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () async {
-      if (query.length < 3) {
-        setState(() => _suggestions = []);
+
+    if (query.isEmpty) {
+      setState(() {
+        _suggestions = [];
+        _isSearchLoading = false;
+      });
+      return;
+    }
+
+    // Mint a new session token on the first keystroke of each search session.
+    if (_searchSessionToken.isEmpty) {
+      _searchSessionToken = 'session_${DateTime.now().millisecondsSinceEpoch}';
+    }
+
+    setState(() => _isSearchLoading = true);
+
+    _debounce = Timer(const Duration(milliseconds: 400), () async {
+      if (query.trim().length < 2) {
+        if (mounted) {
+          setState(() {
+            _suggestions = [];
+            _isSearchLoading = false;
+          });
+        }
         return;
       }
-      final results = await _mapboxService.getSuggestions(query);
+      final results = await _mapboxService.searchPlaces(
+        query,
+        sessionToken: _searchSessionToken,
+      );
+      print(
+          '[HomeScreen] Results count: ${results.length} for query: "$query"');
       if (mounted) {
         setState(() {
           _suggestions = results;
+          _isSearchLoading = false;
         });
       }
     });
   }
 
-  void _selectSuggestion(Map<String, dynamic> suggestion, bool isStart) {
-    final center = suggestion['center'];
-    final double lng = center[0];
-    final double lat = center[1];
-    final String name = suggestion['place_name'];
+  Future<void> _selectSuggestion(
+      Map<String, dynamic> suggestion, bool isStart) async {
+    final String mapboxId = suggestion['mapbox_id'] ?? '';
+    final String displayName = suggestion['name'] ?? '';
 
+    _startFocus.unfocus();
+    _destinationFocus.unfocus();
     setState(() {
-      if (isStart) {
+      _suggestions = [];
+      _isSearchLoading = true;
+      _isInputExpanded = false;
+    });
+
+    final place = await _mapboxService.retrievePlace(
+      mapboxId,
+      sessionToken: _searchSessionToken,
+    );
+
+    _searchSessionToken = '';
+
+    if (!mounted) return;
+    setState(() => _isSearchLoading = false);
+
+    if (place == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text("Could not get location details. Try again.")),
+      );
+      return;
+    }
+
+    final double lat = place['lat'] as double;
+    final double lng = place['lng'] as double;
+    final String name = (place['name'] as String).isNotEmpty
+        ? place['name'] as String
+        : displayName;
+
+    if (isStart) {
+      setState(() {
         _startLat = lat;
         _startLng = lng;
         _startController.text = name;
-        _startFocus.unfocus();
-      } else {
-        _destLat = lat;
-        _destLng = lng;
-        _destinationController.text = name;
-        _destinationFocus.unfocus();
-      }
-      _suggestions = [];
+      });
+      return;
+    }
+
+    // Destination selected — place a red pin and fly camera before routing
+    setState(() {
+      _destLat = lat;
+      _destLng = lng;
+      _destinationController.text = name;
+      _isPendingRoute = true;
+      _pendingDestName = name;
     });
 
-    if (_destLat != null) {
-      _fetchAndDrawRoute(_destLat!, _destLng!);
-    }
+    // Drop destination pin (red-tinted)
+    await _pointManager?.deleteAll();
+    await _pointManager?.create(
+      PointAnnotationOptions(
+        geometry: Point(coordinates: Position(lng, lat)),
+        iconImage: "marker-15",
+        iconSize: 2.5,
+        iconColor: Colors.redAccent.value,
+      ),
+    );
+
+    // Fetch the real road-following route immediately so it's visible in preview
+    await _fetchAndDrawRoute(lat, lng, isPreview: true);
   }
 
-  Future<void> _fetchAndDrawRoute(double endLat, double endLng) async {
+  Future<void> _fetchAndDrawRoute(double endLat, double endLng, {bool isPreview = false}) async {
+    print('[Route] Origin: $_startLat, $_startLng');
+    print('[Route] Destination: $endLat, $endLng');
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("Calculating safest path..."),
@@ -476,27 +641,40 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       endLng,
     );
 
+    if (!mounted) return;
+
     if (result != null && result['status'] == 'success') {
       final route = result['recommended_route'];
       final String encodedPolyline = route['route_geometry'];
-      final int safetyScore = route['safety_score'];
-      final double duration = route['duration'] / 60;
-      // Read the is_route_safe flag from the backend response
+      final int safetyScore = (route['safety_score'] as num?)?.toInt() ?? 50;
+      final double duration = (route['duration'] as num) / 60;
       final bool routeSafe = result['is_route_safe'] ?? true;
 
+      // Multi-factor risk fields (new engine)
+      final String riskLevel = result['risk_level'] as String? ?? route['risk_level'] as String? ?? 'low';
+      final String explanation = result['explanation'] as String? ?? route['explanation'] as String? ?? '';
+      final List highRiskSegs = result['high_risk_segments'] as List? ?? route['high_risk_segments'] as List? ?? [];
+
       PolylinePoints polylinePoints = PolylinePoints();
-      List<PointLatLng> decodedPoints = polylinePoints.decodePolyline(
-        encodedPolyline,
-      );
+      List<PointLatLng> decodedPoints = polylinePoints.decodePolyline(encodedPolyline);
       List<Position> routeGeometry =
           decodedPoints.map((p) => Position(p.longitude, p.latitude)).toList();
 
-      // Render polyline in RED if route is unsafe, BLUE if safe
+      // Route color based on multi-factor risk level
+      Color routeColor;
+      if (riskLevel == 'high') {
+        routeColor = const Color(0xFFFF3B30);
+      } else if (riskLevel == 'medium') {
+        routeColor = Colors.orange;
+      } else {
+        routeColor = Colors.green;
+      }
+
       _polylineManager?.create(
         PolylineAnnotationOptions(
           geometry: LineString(coordinates: routeGeometry),
-          lineColor: routeSafe ? Colors.blueAccent.value : Colors.redAccent.value,
-          lineWidth: 6.0,
+          lineColor: routeColor.value,
+          lineWidth: 4.0,
           lineJoin: LineJoin.ROUND,
         ),
       );
@@ -509,17 +687,63 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       );
 
-      setState(() {
-        _isRouteActive = true;
-        _isTracking = false;
-        _isRouteSafe = routeSafe;
-        _riskScore = 100 - safetyScore;
-        _durationMin = duration;
-        _currentRouteGeometry = routeGeometry;
-      });
+      if (isPreview) {
+        setState(() {
+          _pendingRouteData = result;
+          _currentRouteGeometry = routeGeometry;
+          _isRouteSafe = routeSafe;
+          _riskScore = 100 - safetyScore;
+          _durationMin = duration;
+          _riskLevel = riskLevel;
+          _riskExplanation = explanation;
+          _highRiskSegmentCount = highRiskSegs.length;
+        });
+      } else {
+        setState(() {
+          _isRouteActive = true;
+          _isTracking = false;
+          _isRouteSafe = routeSafe;
+          _riskScore = 100 - safetyScore;
+          _durationMin = duration;
+          _currentRouteGeometry = routeGeometry;
+          _riskLevel = riskLevel;
+          _riskExplanation = explanation;
+          _highRiskSegmentCount = highRiskSegs.length;
+        });
+      }
+
+      // Fly camera to show the full route
+      if (mapboxMap != null && routeGeometry.isNotEmpty) {
+        final lngs = routeGeometry.map((p) => p.lng.toDouble());
+        final lats = routeGeometry.map((p) => p.lat.toDouble());
+        final minLng = lngs.reduce((a, b) => a < b ? a : b);
+        final maxLng = lngs.reduce((a, b) => a > b ? a : b);
+        final minLat = lats.reduce((a, b) => a < b ? a : b);
+        final maxLat = lats.reduce((a, b) => a > b ? a : b);
+        try {
+          final camera = await mapboxMap!.cameraForCoordinateBounds(
+            CoordinateBounds(
+              southwest: Point(coordinates: Position(minLng - 0.005, minLat - 0.005)),
+              northeast: Point(coordinates: Position(maxLng + 0.005, maxLat + 0.005)),
+              infiniteBounds: false,
+            ),
+            MbxEdgeInsets(top: 80, left: 60, bottom: 160, right: 60),
+            null, null, null, null,
+          );
+          await mapboxMap!.flyTo(camera, MapAnimationOptions(duration: 1000));
+        } catch (_) {}
+      }
+    } else if (result != null && result['status'] == 'error') {
+      final msg = result['message'] as String? ?? 'Routing failed';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Unable to calculate route: $msg")),
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not find a route!")));
+        const SnackBar(
+          content: Text("Unable to calculate route. Please try a different destination."),
+        ),
+      );
     }
   }
 
@@ -545,26 +769,172 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  Future<void> _loadSafeHavens() async {
+    final token = dotenv.env['MAPBOX_ACCESS_TOKEN'] ?? '';
+    if (token.isEmpty) return;
+
+    const categories = ['police', 'hospital', 'pharmacy', 'fire_station'];
+    final List<Map<String, dynamic>> results = [];
+
+    for (final category in categories) {
+      try {
+        final url = Uri.parse(
+          'https://api.mapbox.com/search/searchbox/v1/category/$category'
+          '?access_token=$token'
+          '&proximity=$_startLng,$_startLat'
+          '&limit=2'
+          '&language=en',
+        );
+        final response = await http.get(url);
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final features = data['features'] as List? ?? [];
+          for (final f in features) {
+            final coords = f['geometry']['coordinates'] as List;
+            final props = f['properties'] as Map<String, dynamic>;
+            final dist = _calculateDistance(
+              _startLat, _startLng,
+              coords[1].toDouble(), coords[0].toDouble(),
+            );
+            results.add({
+              'name': props['name'] ?? category,
+              'category': category,
+              'distance': dist,
+              'lat': coords[1].toDouble(),
+              'lng': coords[0].toDouble(),
+              'address': props['full_address'] ?? props['place_formatted'] ?? '',
+            });
+          }
+        }
+      } catch (e) {
+        print('[SafeHavens] Failed to fetch $category: $e');
+      }
+    }
+
+    results.sort((a, b) =>
+        (a['distance'] as double).compareTo(b['distance'] as double));
+
+    if (mounted) {
+      setState(() {
+        _safeHavens = results.take(4).toList();
+      });
+    }
+  }
+
+  double _calculateDistance(
+      double lat1, double lng1, double lat2, double lng2) {
+    const R = 6371.0;
+    final dLat = (lat2 - lat1) * pi / 180;
+    final dLng = (lng2 - lng1) * pi / 180;
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * pi / 180) *
+            cos(lat2 * pi / 180) *
+            sin(dLng / 2) *
+            sin(dLng / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return R * c;
+  }
+
+  void _selectDestinationFromSafeHaven(
+      double lat, double lng, String name) {
+    _pointManager?.deleteAll();
+    _polylineManager?.deleteAll();
+    setState(() {
+      _destLat = lat;
+      _destLng = lng;
+      _destinationController.text = name;
+      _isPendingRoute = true;
+      _pendingDestName = name;
+    });
+    _fetchAndDrawRoute(lat, lng, isPreview: true);
+  }
+
+  // --- HEATMAP ---
+
+  Future<void> _loadHeatmap() async {
+    String city = 'hyderabad';
+    if (_startLat >= 12.8 && _startLat <= 13.3 &&
+        _startLng >= 80.0 && _startLng <= 80.4) {
+      city = 'chennai';
+    }
+    final zones = await _apiService.getHeatmapZones(
+      city: city,
+      hour: DateTime.now().hour,
+    );
+    setState(() => _heatmapZones = zones);
+    await _renderHeatmap();
+  }
+
+  Future<void> _renderHeatmap() async {
+    if (_heatmapManager == null) return;
+    await _heatmapManager!.deleteAll();
+    final List<PolygonAnnotationOptions> options = [];
+    for (final zone in _heatmapZones) {
+      final double lat = (zone['latitude'] as num).toDouble();
+      final double lng = (zone['longitude'] as num).toDouble();
+      final double radiusM = (zone['radius_m'] as num).toDouble();
+      final String level = zone['risk_level'] as String? ?? 'medium';
+      final int fillColor = level == 'high'
+          ? Colors.red.withValues(alpha: 0.25).toARGB32()
+          : Colors.orange.withValues(alpha: 0.20).toARGB32();
+      final int strokeColor = level == 'high'
+          ? Colors.red.withValues(alpha: 0.55).toARGB32()
+          : Colors.orange.withValues(alpha: 0.50).toARGB32();
+      final ring = _generateCirclePolygon(lat, lng, radiusM);
+      options.add(PolygonAnnotationOptions(
+        geometry: Polygon(coordinates: [ring]),
+        fillColor: fillColor,
+        fillOutlineColor: strokeColor,
+      ));
+    }
+    if (options.isNotEmpty) {
+      await _heatmapManager!.createMulti(options);
+    }
+  }
+
+  Future<void> _clearHeatmap() async {
+    await _heatmapManager?.deleteAll();
+    setState(() => _heatmapZones = []);
+  }
+
+  List<Position> _generateCirclePolygon(
+      double lat, double lng, double radiusM,
+      {int points = 32}) {
+    const double earthRadius = 6371000.0;
+    final List<Position> coords = [];
+    for (int i = 0; i <= points; i++) {
+      final double angle = (i / points) * 2 * pi;
+      final double dLat =
+          (radiusM / earthRadius) * (180 / pi) * sin(angle);
+      final double dLng = (radiusM / earthRadius) *
+          (180 / pi) *
+          cos(angle) /
+          cos(lat * pi / 180);
+      coords.add(Position(lng + dLng, lat + dLat));
+    }
+    return coords;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SlidingUpPanel(
-        maxHeight: 450,
-        minHeight: 180,
-        parallaxEnabled: true,
+        maxHeight: _isPendingRoute ? 0 : 450,
+        minHeight: _isPendingRoute ? 0 : 180,
+        parallaxEnabled: !_isPendingRoute,
         parallaxOffset: .5,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(24.0),
           topRight: Radius.circular(24.0),
         ),
-        panel: _buildBottomSheet(),
+        panel: _isPendingRoute ? const SizedBox.shrink() : _buildBottomSheet(),
         body: Stack(
           children: [
             MapWidget(
               key: const ValueKey("mapWidget"),
               cameraOptions: CameraOptions(
                 center: Point(coordinates: Position(_startLng, _startLat)),
-                zoom: 13.5,
+                zoom: 15.0,
               ),
               styleUri: _isNightMode
                   ? MapboxStyles.DARK
@@ -573,6 +943,31 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               onTapListener: _handleMapTap,
             ),
             _buildAnimatedSearchPanel(),
+            if (_isPendingRoute) _buildDestinationPreviewCard(),
+            Positioned(
+              top: 120,
+              right: 12,
+              child: SafeArea(
+                child: FloatingActionButton.small(
+                  heroTag: 'heatmap_toggle',
+                  backgroundColor:
+                      _showHeatmap ? Colors.red.shade700 : Colors.grey.shade800,
+                  onPressed: () {
+                    setState(() => _showHeatmap = !_showHeatmap);
+                    if (_showHeatmap) {
+                      _loadHeatmap();
+                    } else {
+                      _clearHeatmap();
+                    }
+                  },
+                  child: const Icon(
+                    Icons.layers,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -582,33 +977,47 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildAnimatedSearchPanel() {
     return Positioned(
-      top: 55,
-      left: 15,
-      right: 15,
-      child: GestureDetector(
-        onTap: () {
-          if (!_isInputExpanded) setState(() => _isInputExpanded = true);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOutCubic,
-          height: _isInputExpanded
-              ? 160 + (_suggestions.length * 55).toDouble()
-              : 55,
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-          decoration: BoxDecoration(
-            color: SentraDesign.pureWhite,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: SentraDesign.uberBlack, width: 1),
-            boxShadow: SentraDesign.cardShadow,
-          ),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: SingleChildScrollView(
-              physics: const NeverScrollableScrollPhysics(),
-              child: _isInputExpanded
-                  ? _buildExpandedInputs()
-                  : _buildCollapsedInput(),
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        child: GestureDetector(
+          onTap: () {
+            if (!_isInputExpanded) setState(() => _isInputExpanded = true);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutCubic,
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            height: _isInputExpanded
+                ? 160 +
+                    (_isSearchLoading ? 48 : 0) +
+                    (_suggestions.length * 64).toDouble()
+                : 52,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E),
+              borderRadius: _isInputExpanded
+                  ? const BorderRadius.only(
+                      bottomLeft: Radius.circular(20),
+                      bottomRight: Radius.circular(20),
+                    )
+                  : BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: _isInputExpanded
+                    ? _buildExpandedInputs()
+                    : _buildCollapsedInput(),
+              ),
             ),
           ),
         ),
@@ -617,159 +1026,388 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildCollapsedInput() {
-    return Row(
+    return Padding(
       key: const ValueKey("collapsed"),
-      children: [
-        const Icon(Icons.search, color: SentraDesign.uberBlack, size: 24),
-        const SizedBox(width: 15),
-        Text(
-          "Where to?",
-          style: GoogleFonts.inter(
-            color: SentraDesign.uberBlack,
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Icon(Icons.search, color: Colors.grey.shade400, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              "Where to?",
+              style: GoogleFonts.inter(
+                color: Colors.grey.shade400,
+                fontWeight: FontWeight.w500,
+                fontSize: 16,
+              ),
+            ),
           ),
-        ),
-        const Spacer(),
-        Container(
-          padding: const EdgeInsets.all(5),
-          decoration: BoxDecoration(
-            color: SentraDesign.chipGray,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            _audioSentinel.isListening ? Icons.mic : Icons.mic_off,
-            size: 18,
-            color: _audioSentinel.isListening
-                ? SentraDesign.uberBlack
-                : SentraDesign.mutedGray,
-          ),
-        ),
-      ],
+          Icon(Icons.mic, color: Colors.grey.shade400, size: 22),
+        ],
+      ),
     );
   }
 
   Widget _buildExpandedInputs() {
-    return Column(
+    const fieldBg = Color(0xFF2C2C2C);
+    final hintStyle = GoogleFonts.inter(color: Colors.grey.shade400, fontSize: 15);
+    final fieldBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(28),
+      borderSide: BorderSide.none,
+    );
+    final focusedBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(28),
+      borderSide: const BorderSide(color: Color(0xFF00BCD4), width: 1.5),
+    );
+
+    return Padding(
       key: const ValueKey("expanded"),
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Row(
-          children: [
-            GestureDetector(
-              onTap: () {
-                setState(() => _isInputExpanded = false);
-                _startFocus.unfocus();
-                _destinationFocus.unfocus();
-                _suggestions = [];
-              },
-              child:
-                  const Icon(Icons.arrow_back, color: SentraDesign.uberBlack, size: 20),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              children: [
-                const Icon(Icons.circle, color: SentraDesign.uberBlack, size: 10),
-                Container(
-                  height: 20,
-                  width: 2,
-                  color: SentraDesign.hoverGray,
-                  margin: const EdgeInsets.symmetric(vertical: 2),
-                ),
-              ],
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _startController,
-                focusNode: _startFocus,
-                onChanged: (val) => _onSearchChanged(val, true),
-                decoration: InputDecoration(
-                  hintText: "Start Location",
-                  hintStyle: GoogleFonts.inter(color: SentraDesign.mutedGray),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w500, fontSize: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Back arrow + origin field
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isInputExpanded = false;
+                    _suggestions = [];
+                    _isSearchLoading = false;
+                    _searchSessionToken = '';
+                  });
+                  _startFocus.unfocus();
+                  _destinationFocus.unfocus();
+                },
+                child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
               ),
-            ),
-          ],
-        ),
-        Divider(color: SentraDesign.hoverGray, height: 20, thickness: 1),
-        Row(
-          children: [
-            const SizedBox(width: 30),
-            const Icon(Icons.location_on_rounded,
-                color: SentraDesign.uberBlack, size: 16),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _destinationController,
-                focusNode: _destinationFocus,
-                onChanged: (val) => _onSearchChanged(val, false),
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: "Where to?",
-                  hintStyle: GoogleFonts.inter(color: SentraDesign.mutedGray),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600, fontSize: 14),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.map_outlined, color: SentraDesign.uberBlack),
-              tooltip: "Choose on Map",
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              onPressed: () {
-                setState(() => _isInputExpanded = false);
-                _startFocus.unfocus();
-                _destinationFocus.unfocus();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Tap on the map to select destination"),
-                    duration: Duration(seconds: 2),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: TextField(
+                    controller: _startController,
+                    focusNode: _startFocus,
+                    onChanged: (val) => _onSearchChanged(val, true),
+                    cursorColor: const Color(0xFF00BCD4),
+                    style: GoogleFonts.inter(color: Colors.white, fontSize: 15),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: fieldBg,
+                      hintText: "Current Location",
+                      hintStyle: hintStyle,
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.only(left: 14, right: 10),
+                        child: Center(
+                          widthFactor: 0,
+                          child: SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      border: fieldBorder,
+                      enabledBorder: fieldBorder,
+                      focusedBorder: focusedBorder,
+                    ),
                   ),
-                );
-              },
+                ),
+              ),
+            ],
+          ),
+
+          // Connector line — left-aligned under the dot icon
+          Padding(
+            padding: const EdgeInsets.only(left: 46),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                width: 1.5,
+                height: 16,
+                color: Colors.grey.shade600,
+              ),
             ),
+          ),
+
+          // Destination field + map icon
+          Row(
+            children: [
+              const SizedBox(width: 34),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: TextField(
+                    controller: _destinationController,
+                    focusNode: _destinationFocus,
+                    onChanged: (val) => _onSearchChanged(val, false),
+                    autofocus: true,
+                    cursorColor: const Color(0xFF00BCD4),
+                    style: GoogleFonts.inter(color: Colors.white, fontSize: 15).copyWith(overflow: TextOverflow.ellipsis),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: fieldBg,
+                      hintText: "Where to?",
+                      hintStyle: hintStyle,
+                      prefixIcon: const Icon(Icons.location_on,
+                          color: Colors.red, size: 20),
+                      suffixIcon: GestureDetector(
+                        onTap: () {
+                          setState(() => _isInputExpanded = false);
+                          _startFocus.unfocus();
+                          _destinationFocus.unfocus();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Tap on the map to select destination"),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        child: Icon(Icons.map_outlined,
+                            color: Colors.grey.shade500, size: 22),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      border: fieldBorder,
+                      enabledBorder: fieldBorder,
+                      focusedBorder: focusedBorder,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          if (_isSearchLoading || _suggestions.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(height: 1, color: const Color(0xFF333333)),
+            _buildSuggestionsList(),
           ],
-        ),
-        if (_suggestions.isNotEmpty) ...[
-          const Divider(),
-          _buildSuggestionsList(),
         ],
-      ],
+      ),
     );
   }
 
   Widget _buildSuggestionsList() {
+    if (_isSearchLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    if (_suggestions.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        child: Text(
+          "No results found near Hyderabad",
+          style: GoogleFonts.inter(fontSize: 12, color: SentraDesign.mutedGray),
+        ),
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: _suggestions.map((suggestion) {
-        return ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.location_on_outlined,
-              size: 20, color: Colors.grey),
-          title: Text(
-            suggestion['place_name'] ?? "",
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(fontSize: 13),
-          ),
+        final String name = suggestion['name'] ?? '';
+        final String subtitle = suggestion['place_formatted'] ?? '';
+        return InkWell(
           onTap: () {
-            bool isStart = _startFocus.hasFocus;
+            final bool isStart = _startFocus.hasFocus;
             _selectSuggestion(suggestion, isStart);
           },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.location_on_outlined,
+                    size: 18, color: Colors.grey),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white),
+                      ),
+                      if (subtitle.isNotEmpty)
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                              fontSize: 11, color: const Color(0xFF888888)),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildDestinationPreviewCard() {
+    return Positioned(
+      bottom: 80,
+      left: 12,
+      right: 12,
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 110),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x66000000), blurRadius: 16, offset: Offset(0, 4)),
+          ],
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.location_on_rounded,
+                    color: Colors.redAccent, size: 18),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _pendingDestName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                SizedBox(
+                  width: (MediaQuery.of(context).size.width - 24 - 24 - 8) * 0.35,
+                  height: 40,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isPendingRoute = false;
+                        _pendingDestName = '';
+                        _pendingRouteData = null;
+                        _destLat = null;
+                        _destLng = null;
+                        _destinationController.clear();
+                      });
+                      _pointManager?.deleteAll();
+                      _polylineManager?.deleteAll();
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey,
+                      side: const BorderSide(color: Colors.grey),
+                      shape: const StadiumBorder(),
+                      padding: EdgeInsets.zero,
+                    ),
+                    child: Text("Cancel",
+                        style: GoogleFonts.inter(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SizedBox(
+                    height: 40,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        print('=== START JOURNEY TAPPED ===');
+                        final supabase = Supabase.instance.client;
+                        print('User ID: ${supabase.auth.currentUser?.id}');
+                        print('Start: $_startLat, $_startLng');
+                        print('Dest: $_destLat, $_destLng');
+                        print('Active trip before insert: $_activeTripId');
+                        if (_pendingRouteData != null) {
+                          // Route already drawn in preview — just activate it
+                          setState(() {
+                            _isPendingRoute = false;
+                            _pendingRouteData = null;
+                            _isRouteActive = true;
+                            _isTracking = false;
+                          });
+                        } else {
+                          // Fallback: fetch fresh if preview route wasn't cached
+                          setState(() => _isPendingRoute = false);
+                          _fetchAndDrawRoute(_destLat!, _destLng!);
+                        }
+                        if (supabase.auth.currentUser != null) {
+                          try {
+                            print('Attempting trips insert...');
+                            final tripResponse = await supabase
+                                .from('trips')
+                                .insert({
+                                  'user_id': supabase.auth.currentUser!.id,
+                                  'status': 'active',
+                                  'start_location': 'SRID=4326;POINT($_startLng $_startLat)',
+                                  'destination': 'SRID=4326;POINT($_destLng $_destLat)',
+                                  'started_at': DateTime.now().toIso8601String(),
+                                })
+                                .select('id')
+                                .single();
+                            print('Trip insert success: $tripResponse');
+                            final String tripId = tripResponse['id'] as String;
+                            setState(() { _activeTripId = tripId; });
+                            print('Trip created: $tripId');
+                            GeofenceService().startTripTracker(tripId, _currentRouteGeometry);
+                          } catch (e) {
+                            print('Trip insert FAILED: $e');
+                            print('Trip insert error type: ${e.runtimeType}');
+                          }
+                        } else {
+                          print('Trip insert skipped — user not authenticated');
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00BCD4),
+                        foregroundColor: Colors.white,
+                        shape: const StadiumBorder(),
+                        elevation: 0,
+                        padding: EdgeInsets.zero,
+                      ),
+                      child: Text("Start Journey",
+                          style: GoogleFonts.inter(
+                              fontSize: 13, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -780,78 +1418,101 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           children: [
             Container(
               width: double.infinity,
-              height: 100,
-              decoration: BoxDecoration(
-                color: _riskScore > 50
-                    ? SentraDesign.chipGray
-                    : SentraDesign.uberBlack,
-                borderRadius: const BorderRadius.only(
+              decoration: const BoxDecoration(
+                color: SentraDesign.uberBlack,
+                borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(24),
                   topRight: Radius.circular(24),
                 ),
               ),
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _riskScore > 50 ? "CAUTION ADVISED" : "SAFEST ROUTE",
-                        style: GoogleFonts.inter(
-                          color: _riskScore > 50
-                              ? SentraDesign.bodyGray
-                              : const Color(0xB3FFFFFF),
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Risk badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _riskLevel == 'high'
+                                ? const Color(0xFFFF3B30)
+                                : _riskLevel == 'medium'
+                                    ? const Color(0xFFFF9500)
+                                    : const Color(0xFF34C759),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _riskLevel == 'high'
+                                ? 'HIGH RISK'
+                                : _riskLevel == 'medium'
+                                    ? 'CAUTION'
+                                    : 'SAFE ROUTE',
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
                         ),
-                      ),
-                      Text(
-                        "${_durationMin.toStringAsFixed(0)} mins • Risk: $_riskScore%",
-                        style: GoogleFonts.inter(
-                          color: _riskScore > 50
-                              ? SentraDesign.uberBlack
-                              : SentraDesign.pureWhite,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 6),
+                        Text(
+                          "${_durationMin.toStringAsFixed(0)} min walk",
+                          style: GoogleFonts.inter(
+                            color: SentraDesign.pureWhite,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
+                        if (_riskExplanation.isNotEmpty)
+                          Text(
+                            _riskExplanation,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              color: const Color(0xB3FFFFFF),
+                              fontSize: 11,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                   Icon(
                     Icons.directions_walk,
-                    color: _riskScore > 50
-                        ? SentraDesign.uberBlack
-                        : SentraDesign.pureWhite,
+                    color: _riskLevel == 'high'
+                        ? const Color(0xFFFF3B30)
+                        : _riskLevel == 'medium'
+                            ? const Color(0xFFFF9500)
+                            : const Color(0xFF34C759),
                     size: 40,
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
-            // WARNING banner when the route is flagged as unsafe by the backend
-            if (!_isRouteSafe)
+            const SizedBox(height: 12),
+            if (_highRiskSegmentCount > 0)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 20),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: Colors.redAccent.withOpacity(0.12),
+                  color: const Color(0x1AFF3B30),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.redAccent, width: 1.2),
+                  border: Border.all(color: const Color(0xFFFF3B30), width: 1.2),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 22),
+                    const Icon(Icons.warning_amber_rounded,
+                        color: Color(0xFFFF3B30), size: 20),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        "WARNING: Path intersects known threat zones",
+                        "$_highRiskSegmentCount high-risk segment${_highRiskSegmentCount > 1 ? 's' : ''} on this route",
                         style: GoogleFonts.inter(
-                          color: Colors.redAccent,
-                          fontSize: 13,
+                          color: const Color(0xFFFF3B30),
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -861,7 +1522,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             if (!_isRouteSafe) const SizedBox(height: 12),
             ListTile(
-              leading: const Icon(Icons.info_outline, color: SentraDesign.uberBlack),
+              leading:
+                  const Icon(Icons.info_outline, color: SentraDesign.uberBlack),
               title: Text(
                 "Route Details",
                 style: GoogleFonts.inter(fontWeight: FontWeight.w600),
@@ -877,7 +1539,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 children: [
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
+                        if (_activeTripId != null) {
+                          await Supabase.instance.client
+                              .from('trips')
+                              .update({
+                                'status': 'completed',
+                                'updated_at': DateTime.now().toIso8601String(),
+                              })
+                              .eq('id', _activeTripId!);
+                          setState(() { _activeTripId = null; });
+                        }
+                        GeofenceService().stopTripTracker();
                         setState(() {
                           _isRouteActive = false;
                           _isTracking = false;
@@ -885,7 +1558,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           _destinationController.clear();
                           _polylineManager?.deleteAll();
                           _pointManager?.deleteAll();
-                          GeofenceService().stopTripTracker();
                         });
                       },
                       style: ElevatedButton.styleFrom(
@@ -896,7 +1568,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         side: const BorderSide(color: SentraDesign.uberBlack),
                         elevation: 0,
                       ),
-                        child: Text(
+                      child: Text(
                         "Cancel",
                         style: GoogleFonts.inter(
                             color: SentraDesign.uberBlack,
@@ -909,53 +1581,45 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     child: ElevatedButton(
                       onPressed: () async {
                         if (_isTracking) {
-                           // End Trip
-                           setState(() {
-                             _isTracking = false;
-                             _isRouteActive = false;
-                             _isInputExpanded = false;
-                             _destinationController.clear();
-                             _polylineManager?.deleteAll();
-                             _pointManager?.deleteAll();
-                           });
-                           GeofenceService().stopTripTracker();
-                           if (_activeTripId != null) {
-                             await Supabase.instance.client.from('trips').update({'status': 'completed'}).eq('id', _activeTripId as String);
-                             _activeTripId = null;
-                           }
-                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Arrived. Trip Ended.")));
+                          // End Trip
+                          setState(() {
+                            _isTracking = false;
+                            _isRouteActive = false;
+                            _isInputExpanded = false;
+                            _destinationController.clear();
+                            _polylineManager?.deleteAll();
+                            _pointManager?.deleteAll();
+                          });
+                          if (_activeTripId != null) {
+                            print('Trip ended: $_activeTripId');
+                            await Supabase.instance.client
+                                .from('trips')
+                                .update({
+                                  'status': 'completed',
+                                  'updated_at': DateTime.now().toIso8601String(),
+                                })
+                                .eq('id', _activeTripId!);
+                            setState(() { _activeTripId = null; });
+                          }
+                          GeofenceService().stopTripTracker();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text("Arrived. Trip Ended.")));
                         } else {
-                           // Start Trip
-                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Generating Secure Escort Trip...")));
-                           try {
-                             if (Supabase.instance.client.auth.currentUser == null) {
-                               ScaffoldMessenger.of(context).showSnackBar(
-                                 const SnackBar(content: Text("Please sign in to start a trip.")),
-                               );
-                               return;
-                             }
-                             final expectedArrival = DateTime.now()
-                                 .add(Duration(minutes: _durationMin.toInt()))
-                                 .toIso8601String();
-                             final response = await Supabase.instance.client.from('trips').insert({
-                               'user_id': Supabase.instance.client.auth.currentUser!.id,
-                               'status': 'active',
-                               'start_location': 'SRID=4326;POINT($_startLng $_startLat)',
-                               'destination': 'SRID=4326;POINT($_destLng $_destLat)',
-                               'expected_arrival': expectedArrival,
-                             }).select('id').single();
-                             
-                             _activeTripId = response['id'];
-                             setState(() {
-                               _isTracking = true;
-                             });
-                             GeofenceService().startTripTracker(_activeTripId!, _currentRouteGeometry);
-                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Tracking Active! Trip ID: ${_activeTripId!.substring(0, 8)}")));
-                           } catch (e) {
-                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to start trip: $e")));
-                            }
-                         }
-                       },
+                          // Start Trip — trip row already created by Start Journey
+                          setState(() { _isTracking = true; });
+                          if (_activeTripId != null) {
+                            GeofenceService().startTripTracker(
+                                _activeTripId!, _currentRouteGeometry);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text(
+                                    "Tracking Active! Trip ID: ${_activeTripId!.substring(0, 8)}")));
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Generating Secure Escort Trip...")));
+                          }
+                        }
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _isTracking
                             ? SentraDesign.bodyGray
@@ -1007,7 +1671,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     Row(
                       children: [
                         Icon(_safetyIcon,
-                            color: _safetyIconColor, size: 18), // ✅ Dynamic Icon
+                            color: _safetyIconColor,
+                            size: 18), // ✅ Dynamic Icon
                         const SizedBox(width: 8),
                         Text(
                           _safetyStatusTitle, // ✅ Dynamic Title
@@ -1173,9 +1838,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(height: 15),
-                _buildSafePlaceTile("Katpadi Station", "0.5 km • Open 24x7"),
-                _buildSafePlaceTile(
-                    "SRM Main Gate", "1.2 km • Security Present"),
+                if (_safeHavens.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      "Loading nearby safe places...",
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  )
+                else
+                  ..._safeHavens.map((h) => _buildSafePlaceTile(h)),
                 const SizedBox(height: 20),
               ],
             ),
@@ -1187,17 +1862,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Future<void> _showProfileSheet() async {
     final user = Supabase.instance.client.auth.currentUser;
+    print(
+        '[Profile] Fetching profile for user: ${user?.id} | meta_name: ${user?.userMetadata?['full_name']} | phone: ${user?.phone}');
     String? fullName;
+    String? phone;
     try {
       if (user != null) {
         final row = await Supabase.instance.client
             .from('profiles')
-            .select('full_name')
+            .select('full_name,phone')
             .eq('id', user.id)
             .maybeSingle();
         fullName = row?['full_name'] as String?;
+        phone = row?['phone'] as String?;
       }
     } catch (_) {}
+
+    // Auth session metadata is always current (set at OTP verify time).
+    // Prefer it over the DB row, which may be stale from a previous user.
+    final metaName = user?.userMetadata?['full_name'] as String?;
+    final authPhone = user?.phone;
+    fullName = metaName?.isNotEmpty == true
+        ? metaName
+        : (fullName?.isNotEmpty == true ? fullName : metaName);
+    phone = authPhone?.isNotEmpty == true
+        ? authPhone
+        : (phone?.isNotEmpty == true ? phone : authPhone);
 
     if (!mounted) return;
     await showModalBottomSheet<void>(
@@ -1233,7 +1923,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  user?.phone ?? user?.email ?? '—',
+                  phone ?? user?.email ?? '—',
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     color: SentraDesign.bodyGray,
@@ -1252,6 +1942,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   height: 48,
                   child: ElevatedButton(
                     onPressed: () async {
+                      await GeofenceService().clearLocation();
                       await Supabase.instance.client.auth.signOut();
                       if (ctx.mounted) Navigator.of(ctx).pop();
                     },
@@ -1339,50 +2030,83 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSafePlaceTile(String title, String subtitle) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: SentraDesign.cardShadow,
+  Widget _buildSafePlaceTile(Map<String, dynamic> haven) {
+    final String title = haven['name'] as String;
+    final double dist = haven['distance'] as double;
+    final String address = (haven['address'] as String?) ?? '';
+    final String category = (haven['category'] as String?) ?? '';
+
+    IconData icon;
+    switch (category) {
+      case 'police':
+        icon = Icons.local_police;
+        break;
+      case 'hospital':
+        icon = Icons.local_hospital;
+        break;
+      case 'pharmacy':
+        icon = Icons.local_pharmacy;
+        break;
+      case 'fire_station':
+        icon = Icons.fire_truck;
+        break;
+      default:
+        icon = Icons.store_rounded;
+    }
+
+    return GestureDetector(
+      onTap: () => _selectDestinationFromSafeHaven(
+        haven['lat'] as double,
+        haven['lng'] as double,
+        title,
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: SentraDesign.chipGray,
-              borderRadius: BorderRadius.circular(10),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: SentraDesign.cardShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: SentraDesign.chipGray,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: SentraDesign.uberBlack, size: 22),
             ),
-            child:
-                const Icon(Icons.store_rounded, color: SentraDesign.uberBlack, size: 22),
-          ),
-          const SizedBox(width: 15),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${dist.toStringAsFixed(1)} km'
+                    '${address.isNotEmpty ? ' • $address' : ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          const Icon(Icons.directions_outlined, color: Colors.grey, size: 20),
-        ],
+            ),
+            const Icon(Icons.directions_outlined, color: Colors.grey, size: 20),
+          ],
+        ),
       ),
     );
   }
@@ -1465,7 +2189,8 @@ class _SosCountdownDialogState extends State<SosCountdownDialog>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: SentraDesign.pureWhite),
+                  const Icon(Icons.warning_amber_rounded,
+                      color: SentraDesign.pureWhite),
                   const SizedBox(width: 8),
                   Text(
                     widget.triggerReason != null
@@ -1599,7 +2324,7 @@ class _DriftSosOverlayState extends State<DriftSosOverlay> {
     super.initState();
     activeInstance = this;
     _triggerHaptics();
-    
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _triggerHaptics();
       setState(() {
@@ -1639,55 +2364,52 @@ class _DriftSosOverlayState extends State<DriftSosOverlay> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Center(
-        child: Padding(
+        backgroundColor: Colors.transparent,
+        body: Center(
+            child: Padding(
           padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.warning_rounded, color: SentraDesign.pureWhite, size: 80),
-              const SizedBox(height: 20),
-              Text(
-                  "ARE YOU SAFE?", 
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)
-              ),
-              const SizedBox(height: 10),
-              Text(
-                  "You strayed from your requested path.\nIf you do not respond, we will trigger an SOS dispatch.", 
-                  textAlign: TextAlign.center, 
-                  style: GoogleFonts.inter(color: Colors.white70, fontSize: 16)
-              ),
-              const SizedBox(height: 50),
-              Text(
-                  "$_countdown", 
-                  style: GoogleFonts.inter(color: SentraDesign.pureWhite, fontSize: 100, fontWeight: FontWeight.w900)
-              ),
-              const SizedBox(height: 50),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const Icon(Icons.warning_rounded,
+                color: SentraDesign.pureWhite, size: 80),
+            const SizedBox(height: 20),
+            Text("ARE YOU SAFE?",
+                style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Text(
+                "You strayed from your requested path.\nIf you do not respond, we will trigger an SOS dispatch.",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(color: Colors.white70, fontSize: 16)),
+            const SizedBox(height: 50),
+            Text("$_countdown",
+                style: GoogleFonts.inter(
+                    color: SentraDesign.pureWhite,
+                    fontSize: 100,
+                    fontWeight: FontWeight.w900)),
+            const SizedBox(height: 50),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
                   onPressed: () {
                     _timer?.cancel();
                     Navigator.of(context).pop(true);
                   },
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: SentraDesign.pureWhite,
-                      foregroundColor: SentraDesign.uberBlack,
-                      padding: const EdgeInsets.symmetric(vertical: 20), 
-                      shape: const StadiumBorder(),
-                      elevation: 0,
+                    backgroundColor: SentraDesign.pureWhite,
+                    foregroundColor: SentraDesign.uberBlack,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    shape: const StadiumBorder(),
+                    elevation: 0,
                   ),
-                  child: Text(
-                      "I AM SAFE", 
-                      style: GoogleFonts.inter(color: SentraDesign.uberBlack, fontSize: 24, fontWeight: FontWeight.bold)
-                  )
-                ),
-              ),
-            ]
-          ),
-        )
-      )
-    );
+                  child: Text("I AM SAFE",
+                      style: GoogleFonts.inter(
+                          color: SentraDesign.uberBlack,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold))),
+            ),
+          ]),
+        )));
   }
 }

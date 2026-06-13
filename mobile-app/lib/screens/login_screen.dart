@@ -104,6 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    final enteredName = _nameController.text.trim();
     setState(() => _isSubmitting = true);
     try {
       await Supabase.instance.client.auth.verifyOTP(
@@ -111,6 +112,31 @@ class _LoginScreenState extends State<LoginScreen> {
         token: token,
         type: OtpType.sms,
       );
+      // Force-update metadata so returning users get the name they just typed,
+      // not the name from their first ever signup (signInWithOtp data: is ignored
+      // for existing users).
+      if (enteredName.isNotEmpty) {
+        try {
+          await Supabase.instance.client.auth.updateUser(
+            UserAttributes(data: {'full_name': enteredName}),
+          );
+        } catch (_) {}
+      }
+      // Upsert profiles table immediately with the typed name.
+      // This must happen here — not in HomeScreen._ensureProfile() — because
+      // onAuthStateChange fires concurrently with updateUser, so _ensureProfile
+      // can read stale metadata and overwrite the profile with the old name.
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      final phone = Supabase.instance.client.auth.currentUser?.phone;
+      if (uid != null) {
+        try {
+          await Supabase.instance.client.from('profiles').upsert({
+            'id': uid,
+            'full_name': enteredName.isNotEmpty ? enteredName : null,
+            'phone': phone,
+          }, onConflict: 'id');
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() => _isSubmitting = false);
       if (Supabase.instance.client.auth.currentUser != null) {
