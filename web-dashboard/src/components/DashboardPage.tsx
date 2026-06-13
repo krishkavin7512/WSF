@@ -4,14 +4,13 @@ import {
   SunIcon,
   XIcon,
   Search,
-  MapPin,
   AlertTriangle,
   UserRoundIcon
 } from "lucide-react";
 
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import MapView, { HeatmapZone, DynamicZone } from "./MapView";
+import MapView, { DynamicZone } from "./MapView";
 import { useZones } from "../hooks/useZones";
 import { useRealtimeLocations } from "../hooks/useRealtimeLocations";
 import { useRealtimeIncidents } from "../hooks/useRealtimeIncidents";
@@ -63,20 +62,6 @@ export const DashboardPage: React.FC = () => {
       });
   }, [displayLocations, supabase]);
 
-  const [showHeatmap, setShowHeatmap] = useState(false);
-  const [heatmapZones, setHeatmapZones] = useState<HeatmapZone[]>([]);
-
-  useEffect(() => {
-    if (!supabase) return;
-    supabase
-      .from('heatmap_zones')
-      .select('*')
-      .eq('city', 'hyderabad')
-      .then(({ data, error }) => {
-        if (error) { console.error('heatmap fetch error:', error.message); return; }
-        setHeatmapZones((data as HeatmapZone[]) ?? []);
-      });
-  }, [supabase]);
 
   const [dynamicZones, setDynamicZones] = useState<DynamicZone[]>([]);
 
@@ -117,13 +102,6 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-6">
-            <button
-              onClick={() => setShowHeatmap(!showHeatmap)}
-              className={`flex items-center gap-2 text-sm font-medium transition-colors ${showHeatmap ? 'text-zinc-900' : 'text-zinc-500 hover:text-zinc-800'}`}
-            >
-              <MapPin className="w-4 h-4" /> Heatmap
-            </button>
-            <div className="h-4 w-[1px] bg-zinc-200" />
             <ThemeToggle />
             <div className="h-4 w-[1px] bg-zinc-200" />
             <Avatar className="h-9 w-9 bg-[#18181b] flex items-center justify-center text-white cursor-pointer rounded-full hover:ring-2 hover:ring-zinc-200 transition-all">
@@ -164,9 +142,7 @@ export const DashboardPage: React.FC = () => {
             mapStyle="mapbox://styles/mapbox/light-v11"
             showPatrolRoutes={false}
             flyToLocation={flyToLocation}
-            showHeatmap={showHeatmap}
-            heatmapZones={heatmapZones}
-            dynamicZones={dynamicZones}
+dynamicZones={dynamicZones}
           />
         </div>
       </main>

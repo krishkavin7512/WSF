@@ -28,6 +28,18 @@ class ProfileRepository {
     return row['age'] != null;
   }
 
+  /// True when the user has finished the entire onboarding flow.
+  /// `registration_complete` is the single official gate (set once the
+  /// emergency contact is saved). Prefer this over inferring from other fields.
+  Future<bool> isRegistrationComplete(String userId) async {
+    final row = await _db
+        .from('profiles')
+        .select('registration_complete')
+        .eq('id', userId)
+        .maybeSingle();
+    return (row?['registration_complete'] as bool?) ?? false;
+  }
+
   /// Upserts all personal-info fields. Safe to call on subsequent logins.
   Future<void> savePersonalInfo({
     required String userId,
@@ -62,18 +74,36 @@ class ProfileRepository {
     return (response as List).isNotEmpty;
   }
 
-  /// Inserts a new emergency contact row.
-  Future<void> addEmergencyContact({
+  /// Returns the user's single emergency contact, or null if none is set yet.
+  /// Used by the profile screen so the contact can be edited later.
+  Future<Map<String, dynamic>?> fetchEmergencyContact(String userId) async {
+    return await _db
+        .from('emergency_contacts')
+        .select('id, contact_name, contact_number, relationship')
+        .eq('user_id', userId)
+        .maybeSingle();
+  }
+
+  /// Saves (or replaces) the user's single emergency contact and marks
+  /// onboarding complete. The UNIQUE(user_id) constraint makes this upsert
+  /// replace the existing row in place, so editing later just calls this again.
+  Future<void> saveEmergencyContact({
     required String userId,
     required String contactName,
     required String contactNumber,
     required String relationship,
   }) async {
-    await _db.from('emergency_contacts').insert({
+    await _db.from('emergency_contacts').upsert({
       'user_id': userId,
       'contact_name': contactName,
       'contact_number': contactNumber,
       'relationship': relationship,
-    });
+    }, onConflict: 'user_id');
+
+    // Flip the official onboarding gate once a contact exists.
+    await _db
+        .from('profiles')
+        .update({'registration_complete': true})
+        .eq('id', userId);
   }
 }
