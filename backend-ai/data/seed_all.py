@@ -35,12 +35,20 @@ print("Existing synthetic incidents deleted.")
 print("Reading hyderabad_crimes.csv ...")
 df = pd.read_csv(crimes_path)
 
+# incidents.severity is text with CHECK (low|medium|high); the CSV encodes it as 1/2/3.
+_SEVERITY_WORD = {1: "low", 2: "medium", 3: "high"}
+
+def _severity_word(raw):
+    if isinstance(raw, str) and raw.strip().lower() in ("low", "medium", "high"):
+        return raw.strip().lower()
+    return _SEVERITY_WORD.get(int(raw), "medium")
+
 records = []
 for _, row in df.iterrows():
     records.append({
         "latitude": float(row["latitude"]),
         "longitude": float(row["longitude"]),
-        "severity": int(row["severity"]),
+        "severity": _severity_word(row["severity"]),
         "source": "synthetic",
         "notes": f"{row['crime_type']} | {row.get('area_name', '')} | hour:{int(row['hour'])}",
     })

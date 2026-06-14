@@ -82,7 +82,11 @@ export const DashboardPage: React.FC = () => {
       .map(i => i.user_id!)
   ), [incidents]);
 
-  const criticalAlertsCount = incidents.filter(i => i.severity === 'high' && i.status === 'open').length;
+  // Synthetic incidents are historical crime seed data (they feed DBSCAN zone
+  // generation), not live SOS events — exclude them from the Critical SOS Alerts feed.
+  const isLiveAlert = (i: typeof incidents[number]) =>
+    i.severity === 'high' && i.status === 'open' && i.source !== 'synthetic';
+  const criticalAlertsCount = incidents.filter(isLiveAlert).length;
   const activeUsersCount = displayLocations.length;
   const usersInDangerCount = 0; // Keeping logic aligned with current capabilities while matching UI
 
@@ -178,7 +182,7 @@ export const DashboardPage: React.FC = () => {
                 <div className="text-sm text-zinc-500">No critical alerts active</div>
               ) : (
                 <div className="space-y-2">
-                  {incidents.filter(i => i.severity === 'high' && i.status === 'open').map(incident => (
+                  {incidents.filter(isLiveAlert).map(incident => (
                     <div key={incident.id} className="rounded border border-red-100 bg-red-50 p-2.5">
                       <div className="text-sm font-medium text-red-800">{incident.notes ?? incident.source ?? 'Alert'}</div>
                       <div className="text-xs text-red-600/80 mt-0.5">

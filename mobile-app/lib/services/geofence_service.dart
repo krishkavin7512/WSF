@@ -107,8 +107,10 @@ class GeofenceService {
     final String? userId = _supabase.auth.currentUser?.id;
     if (userId != null) {
       _supabase.from('trip_pings').insert({
-        'trip_id':          _activeTripId,
-        'current_location': 'SRID=4326;POINT($lng $lat)',
+        'trip_id':   _activeTripId,
+        'user_id':   userId,
+        'latitude':  lat,
+        'longitude': lng,
       }).catchError((Object e) {});
     }
 

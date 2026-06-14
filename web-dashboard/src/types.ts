@@ -25,7 +25,7 @@ export interface LiveLocation {
   heading?: number | null;
   speed?: number | null;
   updated_at: string;
-  source_type?: 'online' | 'mesh'; // New: Distinguish connection type
+  source_type?: 'online' | 'offline' | 'mesh'; // Connection/presence state
   mesh_hop_count?: number; // New: 0 for direct, >0 for mesh
 }
 
