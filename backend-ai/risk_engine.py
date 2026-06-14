@@ -2,6 +2,7 @@
 Multi-factor risk scoring engine for Hyderabad SafeNav.
 Loads synthetic datasets once and provides fast KD-tree spatial lookups.
 """
+import math
 import os
 from datetime import datetime
 from typing import List, Optional
@@ -58,6 +59,46 @@ def _level_and_color(score: float):
     if score >= 40:
         return "medium", "#FF9500"
     return "low", "#34C759"
+
+
+# 8 compass bearings (clockwise from north) used to fan out candidate "safe
+# spots" around the user. Human labels go straight into the LLM context.
+_COMPASS_8 = [
+    (0,   "north"),
+    (45,  "north-east"),
+    (90,  "east"),
+    (135, "south-east"),
+    (180, "south"),
+    (225, "south-west"),
+    (270, "west"),
+    (315, "north-west"),
+]
+
+# ~111.32 km per degree of latitude (longitude shrinks by cos(lat)).
+_M_PER_DEG = 111320.0
+
+
+def _offset_latlng(lat: float, lng: float, north_m: float, east_m: float):
+    """Shift a point by (north_m, east_m) metres and return the new lat/lng."""
+    d_lat = north_m / _M_PER_DEG
+    d_lng = east_m / (_M_PER_DEG * math.cos(math.radians(lat)))
+    return lat + d_lat, lng + d_lng
+
+
+def _spot_strengths(factors: dict) -> List[str]:
+    """
+    Translate a spot's risk factors (0-100, higher = worse) into plain-language
+    *safety* strengths the LLM can quote. Time-of-day is excluded because it is
+    identical for every nearby spot and so can't differentiate them.
+    """
+    strengths = []
+    if factors.get("lighting_score", 100) <= 40:
+        strengths.append("well-lit")
+    if factors.get("population_score", 100) <= 40:
+        strengths.append("usually busy")
+    if factors.get("crime_score", 100) <= 20:
+        strengths.append("low recent crime")
+    return strengths
 
 
 class HyderabadRiskEngine:
@@ -165,6 +206,60 @@ class HyderabadRiskEngine:
             },
             "explanation": explanation,
         }
+
+    # ------------------------------------------------------------------
+    def find_safe_spots(
+        self,
+        lat: float,
+        lng: float,
+        hour: Optional[int] = None,
+        max_results: int = 3,
+        radii_m: tuple = (300, 600),
+    ) -> dict:
+        """
+        Scan a ring of points around the user and surface the safest reachable
+        spots, so the assistant can answer "what's the safest spot near me?"
+        with a concrete direction + distance instead of a vague platitude.
+
+        Returns {"here": <full risk dict for the user's point>,
+                 "safe_spots": [ {direction, distance_m, risk_level,
+                                  risk_score, strengths, lat, lng}, ... ]}.
+        Spots are ranked safest-first and, when possible, restricted to those
+        meaningfully safer than the user's current location.
+        """
+        if hour is None:
+            hour = datetime.now().hour
+
+        here = self.get_risk_score(lat, lng, hour)
+
+        candidates = []
+        for dist in radii_m:
+            for bearing, label in _COMPASS_8:
+                north = dist * math.cos(math.radians(bearing))
+                east = dist * math.sin(math.radians(bearing))
+                clat, clng = _offset_latlng(lat, lng, north, east)
+                res = self.get_risk_score(clat, clng, hour)
+                candidates.append({
+                    "lat": round(clat, 6),
+                    "lng": round(clng, 6),
+                    "direction": label,
+                    "distance_m": int(dist),
+                    "risk_score": res["risk_score"],
+                    "risk_level": res["risk_level"],
+                    "strengths": _spot_strengths(res["factors"]),
+                })
+
+        # Safest first; break ties by proximity so we point to the *closest*
+        # equally-safe spot.
+        candidates.sort(key=lambda c: (c["risk_score"], c["distance_m"]))
+
+        # Prefer spots clearly safer than where the user stands (≥5 pts lower).
+        # If nothing qualifies (already in a low-risk area), still return the
+        # calmest nearby points so the assistant has something concrete.
+        safer = [c for c in candidates if c["risk_score"] + 5 < here["risk_score"]]
+        chosen = (safer or candidates)[:max_results]
+
+        return {"here": here, "safe_spots": chosen}
 
     # ------------------------------------------------------------------
     def get_route_risk(self, coordinates: List[List[float]]) -> dict:

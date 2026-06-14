@@ -64,21 +64,42 @@ class TestSarvamService(unittest.TestCase):
         self.assertEqual(b64, "base64_audio_string")
 
 class TestAIAssistantEndpoints(unittest.TestCase):
+    @patch("routes.ai_assistant.reverse_geocode")
     @patch("routes.ai_assistant.get_engine")
     @patch("routes.ai_assistant.generate_text")
-    def test_chat_endpoint(self, mock_generate_text, mock_get_engine):
+    def test_chat_endpoint(self, mock_generate_text, mock_get_engine, mock_reverse_geocode):
+        # The chat endpoint now enriches the prompt with nearby safe spots and a
+        # reverse-geocoded area name. Mock both so no network/data is needed.
         mock_engine = MagicMock()
-        mock_engine.get_risk_score.return_value = {"risk_level": "high", "explanation": "Dark alley"}
+        mock_engine.find_safe_spots.return_value = {
+            "here": {"risk_level": "high", "explanation": "Dark alley", "risk_score": 75.0},
+            "safe_spots": [
+                {
+                    "lat": 17.31, "lng": 78.41, "direction": "north-east",
+                    "distance_m": 300, "risk_score": 30.0, "risk_level": "low",
+                    "strengths": ["well-lit", "usually busy"],
+                },
+            ],
+        }
         mock_get_engine.return_value = mock_engine
-        
-        mock_generate_text.return_value = "Stay away."
-        
+        mock_reverse_geocode.return_value = "Banjara Hills Rd"
+
+        mock_generate_text.return_value = "Head north-east toward Banjara Hills Rd."
+
         response = client.post(
             "/ai/chat",
-            json={"query": "Is it safe?", "lat": 17.3, "lng": 78.4, "language": "en-US"}
+            json={"query": "What's the safest spot near me?", "lat": 17.3, "lng": 78.4, "language": "en-US"}
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"reply": "Stay away."})
+        self.assertEqual(response.json(), {"reply": "Head north-east toward Banjara Hills Rd."})
+
+        # The live context must actually reach the LLM: assert the system prompt
+        # carries the named safe spot and its direction/distance.
+        _, kwargs = mock_generate_text.call_args
+        system_prompt = kwargs.get("system", "")
+        self.assertIn("Banjara Hills Rd", system_prompt)
+        self.assertIn("north-east", system_prompt)
+        self.assertIn("300m", system_prompt)
 
     @patch("routes.ai_assistant.reverse_geocode")
     @patch("routes.ai_assistant.generate_text")
@@ -97,6 +118,33 @@ class TestAIAssistantEndpoints(unittest.TestCase):
             "script": "All units to Main St.",
             "audio_base64": "base64data"
         })
+
+class TestRiskEngineSafeSpots(unittest.TestCase):
+    """Locks the new nearby-safe-spot scan that powers location-aware chat."""
+
+    @classmethod
+    def setUpClass(cls):
+        from risk_engine import HyderabadRiskEngine
+        cls.engine = HyderabadRiskEngine()
+
+    def test_find_safe_spots_structure(self):
+        # A point inside the Hyderabad dataset coverage.
+        result = self.engine.find_safe_spots(17.4400, 78.4500, hour=23)
+
+        self.assertIn("here", result)
+        self.assertIn("safe_spots", result)
+        self.assertIn("risk_score", result["here"])
+
+        spots = result["safe_spots"]
+        self.assertLessEqual(len(spots), 3)
+        for spot in spots:
+            for key in ("direction", "distance_m", "risk_score", "risk_level", "lat", "lng"):
+                self.assertIn(key, spot)
+
+        # Spots must be ranked safest-first (ascending risk score).
+        scores = [s["risk_score"] for s in spots]
+        self.assertEqual(scores, sorted(scores))
+
 
 if __name__ == "__main__":
     unittest.main()
